@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 LabAcacia / INNO LOTUS PTY LTD
 //
-// NWP Error Codes — all 47 protocol error codes per spec/error-codes.md
+// NWP Error Codes — all 53 protocol error codes per spec/error-codes.md
 
 // ── Auth / NID ────────────────────────────────────────────────────────────────
 export const NWP_AUTH_NID_SCOPE_VIOLATION     = "NWP-AUTH-NID-SCOPE-VIOLATION" as const;
@@ -64,6 +64,14 @@ export const NWP_MANIFEST_NODE_TYPE_UNKNOWN   = "NWP-MANIFEST-NODE-TYPE-UNKNOWN"
 // ── Reserved / unsupported ────────────────────────────────────────────────────
 export const NWP_RESERVED_TYPE_UNSUPPORTED    = "NWP-RESERVED-TYPE-UNSUPPORTED" as const;
 
+// ── HTTP binding / advertised capability ─────────────────────────────────────
+export const NWP_HTTP_ORIGIN_FORBIDDEN        = "NWP-HTTP-ORIGIN-FORBIDDEN" as const;
+export const NWP_HTTP_CONTENT_TYPE_UNSUPPORTED = "NWP-HTTP-CONTENT-TYPE-UNSUPPORTED" as const;
+export const NWP_HTTP_ACCEPT_UNSATISFIABLE    = "NWP-HTTP-ACCEPT-UNSATISFIABLE" as const;
+export const NWP_HTTP_REQUEST_ID_MISMATCH     = "NWP-HTTP-REQUEST-ID-MISMATCH" as const;
+export const NWP_HTTP_FRAME_BODY_MALFORMED    = "NWP-HTTP-FRAME-BODY-MALFORMED" as const;
+export const NWP_CAPABILITY_ADVERTISED_UNIMPLEMENTED = "NWP-CAPABILITY-ADVERTISED-UNIMPLEMENTED" as const;
+
 // ── Topology (NPS-CR-0002) ────────────────────────────────────────────────────
 export const NWP_TOPOLOGY_UNAUTHORIZED        = "NWP-TOPOLOGY-UNAUTHORIZED" as const;
 export const NWP_TOPOLOGY_UNSUPPORTED_SCOPE   = "NWP-TOPOLOGY-UNSUPPORTED-SCOPE" as const;
@@ -112,6 +120,12 @@ export const NWP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NWP-MANIFEST-NODE-TYPE-UNKNOWN":   "NPS-CLIENT-BAD-FRAME",
   "NWP-RATE-LIMIT-EXCEEDED":          "NPS-LIMIT-RATE",
   "NWP-RESERVED-TYPE-UNSUPPORTED":    "NPS-SERVER-UNSUPPORTED",
+  "NWP-HTTP-ORIGIN-FORBIDDEN":        "NPS-AUTH-FORBIDDEN",
+  "NWP-HTTP-CONTENT-TYPE-UNSUPPORTED": "NPS-CLIENT-BAD-FRAME",
+  "NWP-HTTP-ACCEPT-UNSATISFIABLE":    "NPS-CLIENT-BAD-PARAM",
+  "NWP-HTTP-REQUEST-ID-MISMATCH":     "NPS-CLIENT-BAD-PARAM",
+  "NWP-HTTP-FRAME-BODY-MALFORMED":    "NPS-CLIENT-BAD-FRAME",
+  "NWP-CAPABILITY-ADVERTISED-UNIMPLEMENTED": "NPS-SERVER-UNSUPPORTED",
   "NWP-TOPOLOGY-UNAUTHORIZED":        "NPS-AUTH-FORBIDDEN",
   "NWP-TOPOLOGY-UNSUPPORTED-SCOPE":   "NPS-CLIENT-BAD-PARAM",
   "NWP-TOPOLOGY-DEPTH-UNSUPPORTED":   "NPS-CLIENT-BAD-PARAM",
