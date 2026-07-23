@@ -2,7 +2,7 @@
 
 # @labacacia/nps-sdk — TypeScript / Node.js
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.15-orange.svg)](../../CHANGELOG.cn.md)
+[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.16-orange.svg)](../../CHANGELOG.cn.md)
 [![NCP](https://img.shields.io/badge/NCP-v0.9-5b8cff.svg)]()
 [![NWP](https://img.shields.io/badge/NWP-v0.14-4af0b0.svg)]()
 [![NIP](https://img.shields.io/badge/NIP-v0.10-7b61ff.svg)]()
@@ -14,7 +14,7 @@
 
 ## 状态
 
-**v1.0.0-alpha.15 — RFC-0002 跨 SDK 端口波（第三棒）** · 5 个协议 · 271 个测试 · 覆盖率 ≥ 98%
+**v1.0.0-alpha.16 — RFC-0002 跨 SDK 端口波（第三棒）** · 5 个协议 · 271 个测试 · 覆盖率 ≥ 98%
 
 Alpha.14 候选新增：远程 NIP CA 类型化客户端（`NipCaClient`）、native-mode NWP 服务端 helper（`NwpNativeNodeServer`）和 TC-N1/TC-N2 一致性 manifest helper（`@labacacia/nps-sdk/conformance`）。
 
@@ -127,10 +127,10 @@ const results = catalogForProfile(NODE_L1).map((c) => ({ id: c.id, result: "pass
 const manifest = createConformanceManifest({
   profile: NODE_L1,
   iutName: "my-node",
-  iutVersion: "1.0.0-alpha.15",
+  iutVersion: "1.0.0-alpha.16",
   iutNid: "urn:nps:node:example.com:my-node",
   peerName: "labacacia-fixture",
-  peerVersion: "1.0.0-alpha.15",
+  peerVersion: "1.0.0-alpha.16",
   results,
 });
 const validation = validateConformanceManifest(manifest);
@@ -181,7 +181,7 @@ import { ... } from "@labacacia/nps-sdk/conformance"; // TC-N1/TC-N2 目录和 m
 
 ## NCP 编解码
 
-编解码层支持双 Tier 编码和对线上字节的直接操作：
+编解码层支持 Tier-1/2/3 编码和对线上字节的直接操作。覆盖编码 Tier 主要用于已协商的会话策略、诊断和测试；应用代码不应在同一业务流程中随意切换 Tier。
 
 ```typescript
 import { NpsFrameCodec, EncodingTier } from "@labacacia/nps-sdk/core";
@@ -192,7 +192,7 @@ const codec = new NpsFrameCodec(createDefaultRegistry());
 // 编码（默认 MsgPack）
 const wire = codec.encode(frame);
 
-// 编码为 JSON（调试 / 互操作）
+// 编码为 JSON（调试 / 互操作策略）
 const json = codec.encode(frame, { overrideTier: EncodingTier.JSON });
 
 // 解码

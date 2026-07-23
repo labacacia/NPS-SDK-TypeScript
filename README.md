@@ -2,7 +2,7 @@ English | [中文版](./README.cn.md)
 
 # @labacacia/nps-sdk — TypeScript / Node.js
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.15-orange.svg)](../../CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.16-orange.svg)](../../CHANGELOG.md)
 [![NCP](https://img.shields.io/badge/NCP-v0.9-5b8cff.svg)]()
 [![NWP](https://img.shields.io/badge/NWP-v0.14-4af0b0.svg)]()
 [![NIP](https://img.shields.io/badge/NIP-v0.10-7b61ff.svg)]()
@@ -14,7 +14,7 @@ Part of the [LabAcacia](https://github.com/LabAcacia) / INNO LOTUS PTY LTD open-
 
 ## Status
 
-**v1.0.0-alpha.15 — RFC-0002 cross-SDK port (third language)** · 5 protocols · 271 tests · ≥ 98% coverage
+**v1.0.0-alpha.16 — RFC-0002 cross-SDK port (third language)** · 5 protocols · 271 tests · ≥ 98% coverage
 
 Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP serving helper (`NwpNativeNodeServer`), and TC-N1/TC-N2 conformance manifest helpers (`@labacacia/nps-sdk/conformance`).
 
@@ -127,10 +127,10 @@ const results = catalogForProfile(NODE_L1).map((c) => ({ id: c.id, result: "pass
 const manifest = createConformanceManifest({
   profile: NODE_L1,
   iutName: "my-node",
-  iutVersion: "1.0.0-alpha.15",
+  iutVersion: "1.0.0-alpha.16",
   iutNid: "urn:nps:node:example.com:my-node",
   peerName: "labacacia-fixture",
-  peerVersion: "1.0.0-alpha.15",
+  peerVersion: "1.0.0-alpha.16",
   results,
 });
 const validation = validateConformanceManifest(manifest);
@@ -181,7 +181,7 @@ import { ... } from "@labacacia/nps-sdk/conformance"; // TC-N1/TC-N2 catalogs an
 
 ## NCP Codec
 
-The codec layer supports dual-tier encoding and direct wire-format manipulation:
+The codec layer supports Tier-1/2/3 encoding and direct wire-format manipulation. Overrides are intended for negotiated session policy, diagnostics, and tests; application code should not switch tiers arbitrarily inside one workflow.
 
 ```typescript
 import { NpsFrameCodec, EncodingTier } from "@labacacia/nps-sdk/core";
@@ -192,7 +192,7 @@ const codec = new NpsFrameCodec(createDefaultRegistry());
 // Encode (defaults to MsgPack)
 const wire = codec.encode(frame);
 
-// Encode as JSON (debugging / interop)
+// Encode as JSON (debugging / interop policy)
 const json = codec.encode(frame, { overrideTier: EncodingTier.JSON });
 
 // Decode
