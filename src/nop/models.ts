@@ -40,6 +40,8 @@ export interface RetryPolicy {
   backoff:      BackoffStrategy;
   baseDelayMs?: number;
   maxDelayMs?:  number;
+  /** Error codes that trigger retry. Omitted/empty means retry on all failures (NPS-5 §3.1.4). */
+  retryOn?:     readonly string[];
 }
 
 export function computeDelayMs(policy: RetryPolicy, attempt: number): number {
@@ -60,10 +62,37 @@ export interface TaskContext {
   traceId?:       string;
 }
 
+/**
+ * Valid values and predicates for `TaskFrame.compensation_policy` (NPS-5 §3.5).
+ * Mirrors NPS.NOP.Models.CompensationPolicy.
+ */
 export const CompensationPolicy = {
-  NONE:       'none',
-  ON_FAILURE: 'on_failure',
-  ALWAYS:     'always',
+  /** Run compensation for completed predecessors on failure; failures are non-terminal. */
+  BEST_EFFORT: 'best_effort',
+  /** Run compensation on failure; missing or failed compensation is terminal. */
+  STRICT:      'strict',
+  /** Legacy alias: no saga rollback. Not an NPS-5 wire value. */
+  NONE:        'none',
+  /** Legacy alias for BEST_EFFORT. */
+  ON_FAILURE:  'on_failure',
+  /** Non-standard extension: compensate after both success and failure. */
+  ALWAYS:      'always',
+
+  /** True when the policy runs compensation after a task failure. */
+  runsOnFailure(policy: string | undefined | null): boolean {
+    return policy === CompensationPolicy.BEST_EFFORT
+      || policy === CompensationPolicy.STRICT
+      || policy === CompensationPolicy.ON_FAILURE
+      || policy === CompensationPolicy.ALWAYS;
+  },
+  /** True when the policy runs compensation after a successful task. */
+  runsOnSuccess(policy: string | undefined | null): boolean {
+    return policy === CompensationPolicy.ALWAYS;
+  },
+  /** True when any missing or failed compensation step is terminal. */
+  isStrict(policy: string | undefined | null): boolean {
+    return policy === CompensationPolicy.STRICT;
+  },
 } as const;
 
 export interface DagNode {

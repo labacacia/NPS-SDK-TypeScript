@@ -21,23 +21,37 @@ export class TaskFrame implements NpsFrame {
     public readonly depth?:               number,
     public readonly compensationPolicy?:  string,
     public readonly resultTtlSeconds:     number = 3600, // NOP v0.7
+    public readonly maxRetries:           number = 2,
+    public readonly callbackSecret?:      string,
+    public readonly preflight:            boolean = false,
+    public readonly requestId?:           string,
   ) {}
+
+  /** Alias for {@link depth}, matching the .NET `delegate_depth` wire field. */
+  get delegateDepth(): number { return this.depth ?? 0; }
 
   toDict(): Record<string, unknown> {
     return {
       task_id:             this.taskId,
       dag:                 this.dag,
       timeout_ms:          this.timeoutMs          ?? null,
-      callback_url:        this.callbackUrl         ?? null,
-      context:             this.context             ?? null,
+      max_retries:         this.maxRetries,
       priority:            this.priority            ?? null,
-      depth:               this.depth               ?? null,
-      compensation_policy: this.compensationPolicy  ?? 'none',
+      callback_url:        this.callbackUrl         ?? null,
+      callback_secret:     this.callbackSecret      ?? null,
+      preflight:           this.preflight,
+      context:             this.context             ?? null,
+      request_id:          this.requestId           ?? null,
+      delegate_depth:      this.depth               ?? 0,
+      compensation_policy: this.compensationPolicy  ?? 'best_effort',
       result_ttl_seconds:  this.resultTtlSeconds,
     };
   }
 
   static fromDict(data: Record<string, unknown>): TaskFrame {
+    // Accept both the legacy `depth` and the .NET `delegate_depth` wire names.
+    const depth = (data["delegate_depth"] as number | null) ??
+                  (data["depth"] as number | null) ?? undefined;
     return new TaskFrame(
       data["task_id"]             as string,
       data["dag"]                 as TaskDag,
@@ -45,9 +59,13 @@ export class TaskFrame implements NpsFrame {
       (data["callback_url"]        as string | null) ?? undefined,
       (data["context"]             as TaskContext | null) ?? undefined,
       (data["priority"]            as TaskPriority | null) ?? undefined,
-      (data["depth"]               as number | null) ?? undefined,
+      depth,
       (data["compensation_policy"] as string | null) ?? undefined,
       (data["result_ttl_seconds"]  as number | null) ?? 3600,
+      (data["max_retries"]         as number | null) ?? 2,
+      (data["callback_secret"]     as string | null) ?? undefined,
+      (data["preflight"]           as boolean | null) ?? false,
+      (data["request_id"]          as string | null) ?? undefined,
     );
   }
 }
@@ -67,31 +85,52 @@ export class DelegateFrame implements NpsFrame {
     public readonly params?:               Record<string, unknown>,
     public readonly idempotencyKey?:       string,
     public readonly targetClusterAnchor?:  string,
+    // NPS-5 §3.2 orchestration fields (populated by NopOrchestrator).
+    public readonly nodeId?:               string,
+    public readonly deadlineAt?:           string,
+    public readonly priority?:             string,
+    public readonly delegateDepth:         number = 0,
+    public readonly context?:              unknown,
   ) {}
+
+  /** Alias for {@link taskId}, matching the .NET `parent_task_id` wire field. */
+  get parentTaskId(): string { return this.taskId; }
+  /** Alias for {@link agentNid}, matching the .NET `target_agent_nid` wire field. */
+  get targetAgentNid(): string { return this.agentNid; }
 
   toDict(): Record<string, unknown> {
     return {
-      task_id:               this.taskId,
+      parent_task_id:        this.taskId,
       subtask_id:            this.subtaskId,
+      node_id:               this.nodeId                ?? null,
+      target_agent_nid:      this.agentNid,
       action:                this.action,
-      agent_nid:             this.agentNid,
       inputs:                this.inputs                ?? null,
       params:                this.params                ?? null,
+      deadline_at:           this.deadlineAt            ?? null,
       idempotency_key:       this.idempotencyKey        ?? null,
+      priority:              this.priority              ?? null,
+      delegate_depth:        this.delegateDepth,
+      context:               this.context               ?? null,
       target_cluster_anchor: this.targetClusterAnchor   ?? null,
     };
   }
 
   static fromDict(data: Record<string, unknown>): DelegateFrame {
     return new DelegateFrame(
-      data["task_id"]               as string,
+      (data["parent_task_id"] ?? data["task_id"]) as string,
       data["subtask_id"]            as string,
       data["action"]                as string,
-      data["agent_nid"]             as string,
+      (data["target_agent_nid"] ?? data["agent_nid"]) as string,
       (data["inputs"]                as Record<string, unknown> | null) ?? undefined,
       (data["params"]                as Record<string, unknown> | null) ?? undefined,
       (data["idempotency_key"]       as string | null) ?? undefined,
       (data["target_cluster_anchor"] as string | null) ?? undefined,
+      (data["node_id"]               as string | null) ?? undefined,
+      (data["deadline_at"]           as string | null) ?? undefined,
+      (data["priority"]              as string | null) ?? undefined,
+      (data["delegate_depth"]        as number | null) ?? 0,
+      data["context"] ?? undefined,
     );
   }
 }

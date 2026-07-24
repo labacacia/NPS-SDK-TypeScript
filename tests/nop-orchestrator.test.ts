@@ -196,7 +196,8 @@ describe("NopOrchestrator", () => {
     const res  = await orch.execute(makeTaskFrame(dag));
 
     expect(res.state).toBe(TaskState.FAILED);
-    expect(res.error?.code).toBe("NOP-TASK-NODE-FAILED");
+    // A failed end node fails the task with NOP-SYNC-DEPENDENCY-FAILED (.NET parity).
+    expect(res.error?.code).toBe("NOP-SYNC-DEPENDENCY-FAILED");
     // maxRetries=2 → 3 total attempts
     expect(disp.dispatch).toHaveBeenCalledTimes(3);
   });

@@ -34,6 +34,10 @@
       "import": "./dist/nop/index.js",
       "types": "./dist/nop/index.d.ts"
     },
+    "./daemon": {
+      "import": "./dist/daemon/index.js",
+      "types": "./dist/daemon/index.d.ts"
+    },
     "./conformance": {
       "import": "./dist/conformance.js",
       "types": "./dist/conformance.d.ts"

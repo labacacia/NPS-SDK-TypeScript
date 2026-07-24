@@ -253,6 +253,47 @@ export class HelloFrame implements NpsFrame {
   }
 }
 
+// ── NcpHandshakeCapsFrame (0x04, native-mode handshake response) ───────────────
+// NPS-1 §4.6 — Server's capability response to a HelloFrame in native mode.
+// Uses frame type 0x04 (Caps) on the wire but carries the server NID and the
+// negotiated encoding policy instead of a query result set.
+
+export class NcpHandshakeCapsFrame implements NpsFrame {
+  readonly frameType     = FrameType.CAPS;
+  readonly preferredTier = EncodingTier.JSON;
+
+  constructor(
+    public readonly nodeId:             string,
+    public readonly caps:               readonly string[],
+    public          negotiatedEncoding?: string,
+    public          enabledEncodings?:   readonly string[],
+    public readonly anchorRef?:         string,
+    public readonly payload?:           unknown,
+  ) {}
+
+  toDict(): Record<string, unknown> {
+    return {
+      node_id:             this.nodeId,
+      caps:                [...this.caps],
+      negotiated_encoding: this.negotiatedEncoding ?? null,
+      enabled_encodings:   this.enabledEncodings ? [...this.enabledEncodings] : null,
+      anchor_ref:          this.anchorRef ?? null,
+      payload:             this.payload   ?? null,
+    };
+  }
+
+  static fromDict(data: Record<string, unknown>): NcpHandshakeCapsFrame {
+    return new NcpHandshakeCapsFrame(
+      data["node_id"] as string,
+      (data["caps"] as string[]) ?? [],
+      (data["negotiated_encoding"] as string | null) ?? undefined,
+      (data["enabled_encodings"]   as string[] | null) ?? undefined,
+      (data["anchor_ref"]          as string | null) ?? undefined,
+      (data["payload"]             as unknown) ?? undefined,
+    );
+  }
+}
+
 // ── NopFrame (0x07) ───────────────────────────────────────────────────────────
 // NCP v0.8 §4.8 / §7.5 — Keepalive/heartbeat frame, no payload.
 // Either peer MAY send after handshake; receiver MUST accept and SHOULD reply.

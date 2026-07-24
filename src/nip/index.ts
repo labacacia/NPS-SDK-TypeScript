@@ -10,7 +10,12 @@ export * from "./assurance-level.js";
 export * from "./cert-format.js";
 export * from "./error-codes.js";
 export * from "./verifier.js";
+export * from "./trust-frame-validator.js";
 export * from "./ca-client.js";
+
+// NPS-3 §6–8 / CR-0003 / CR-0005 — server-side CA service library
+export * as caServer from "./ca/index.js";
+
 export * as x509 from "./x509/index.js";
 export * as acme from "./acme/index.js";
 

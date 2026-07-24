@@ -41,3 +41,14 @@ export * from "./exceptions.js";
 export * from "./status-codes.js";
 export { jcsStringify, sortKeysStringify } from "./canonical-json.js";
 export type { CryptoProvider } from "./crypto-provider.js";
+
+// ── NCP patch-format constants (NPS-1 §4.2) ────────────────────────────────────
+// Mirrors NPS-sdk-dotnet/src/NPS.Core/NcpPatchFormat.cs, which lives in the core
+// namespace. The canonical definitions live under ncp/ in this SDK.
+export { PATCH_FORMAT, isValidPatchFormat } from "../ncp/ncp-patch-format.js";
+export type { PatchFormat } from "../ncp/ncp-patch-format.js";
+
+// ── Telemetry (metrics + tracing abstraction) ────────────────────────────────
+// [I] infrastructure band. Dependency-free port of the .NET Meter /
+// ActivitySource instrumentation model. See ../nwp/telemetry, ../nop/telemetry.
+export * from "./telemetry.js";

@@ -64,6 +64,12 @@ export const OCSP_STAPLE_EXPIRED      = "NIP-OCSP-STAPLE-EXPIRED" as const;
 // ── NIP v0.10 — node_roles ───────────────────────────────────────────────────
 export const CERT_NODE_ROLES_MISMATCH = "NIP-CERT-NODE-ROLES-MISMATCH" as const;
 
+// ── NPS-CR-0005 (RA enrollment tiers) ────────────────────────────────────────
+export const RA_TOKEN_INVALID    = "NIP-RA-TOKEN-INVALID" as const;
+export const RA_TOKEN_EXPIRED     = "NIP-RA-TOKEN-EXPIRED" as const;
+export const RA_NID_NOT_ALLOWED   = "NIP-RA-NID-NOT-ALLOWED" as const;
+export const RA_PENDING_REJECTED  = "NIP-RA-PENDING-REJECTED" as const;
+
 /** Maps each NIP error code to its NPS status code. */
 export const NIP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NIP-CERT-EXPIRED":                      "NPS-AUTH-UNAUTHENTICATED",
@@ -106,4 +112,8 @@ export const NIP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NIP-CERT-PARENT-REVOKED":               "NPS-AUTH-UNAUTHENTICATED",
   "NIP-OCSP-STAPLE-EXPIRED":               "NPS-AUTH-UNAUTHENTICATED",
   "NIP-CERT-NODE-ROLES-MISMATCH":          "NPS-AUTH-FORBIDDEN",
+  "NIP-RA-TOKEN-INVALID":                  "NPS-AUTH-UNAUTHENTICATED",
+  "NIP-RA-TOKEN-EXPIRED":                  "NPS-AUTH-UNAUTHENTICATED",
+  "NIP-RA-NID-NOT-ALLOWED":                "NPS-AUTH-FORBIDDEN",
+  "NIP-RA-PENDING-REJECTED":               "NPS-AUTH-FORBIDDEN",
 };
