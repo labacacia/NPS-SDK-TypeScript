@@ -7,4 +7,4 @@
 //   import { ... } from "@labacacia/nps-sdk/core"
 //   import { ... } from "@labacacia/nps-sdk/ncp"
 
-export const VERSION = "1.0.0-alpha.16";
+export const VERSION = "1.0.0-alpha.17";
