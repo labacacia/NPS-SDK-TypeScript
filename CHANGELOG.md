@@ -8,6 +8,23 @@ Until NPS reaches v1.0 stable, every repository in the suite is synchronized to 
 
 ---
 
+## [1.0.0-alpha.17] — Unreleased
+
+### Added
+
+- Port the reference server surface into the TypeScript SDK: NCP native transport, NWP action/complex/memory nodes and bidirectional bridges, NIP CA services and full verification, NOP orchestration, daemon observability, and telemetry.
+- Export the daemon observability surface through the `./daemon` package subpath.
+
+### Security
+
+- Refresh the locked Vitest/Vite/PostCSS/esbuild toolchain to resolve all reported npm audit findings.
+
+## [1.0.0-alpha.16] — 2026-07-23
+
+### Changed
+
+- Suite-wide alpha.16 source synchronization and protocol compatibility update.
+
 ## [1.0.0-alpha.15] — 2026-06-28
 
 ### Changed

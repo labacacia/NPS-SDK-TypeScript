@@ -2,7 +2,7 @@ English | [中文版](./README.cn.md)
 
 # @labacacia/nps-sdk — TypeScript / Node.js
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.16-orange.svg)](../../CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.17-orange.svg)](../../CHANGELOG.md)
 [![NCP](https://img.shields.io/badge/NCP-v0.9-5b8cff.svg)]()
 [![NWP](https://img.shields.io/badge/NWP-v0.14-4af0b0.svg)]()
 [![NIP](https://img.shields.io/badge/NIP-v0.10-7b61ff.svg)]()
@@ -14,7 +14,7 @@ Part of the [LabAcacia](https://github.com/LabAcacia) / INNO LOTUS PTY LTD open-
 
 ## Status
 
-**v1.0.0-alpha.16 — RFC-0002 cross-SDK port (third language)** · 5 protocols · 271 tests · ≥ 98% coverage
+**v1.0.0-alpha.17 candidate — server and orchestration surface parity** · 5 protocols · 979 tests
 
 Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP serving helper (`NwpNativeNodeServer`), and TC-N1/TC-N2 conformance manifest helpers (`@labacacia/nps-sdk/conformance`).
 
@@ -32,10 +32,9 @@ Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP 
 - `nip.acme` — `AcmeClient` + in-process `AcmeServer` + JWS / message helpers (RFC 8555 + EdDSA per RFC 8037).
 - `IdentFrame` extended with non-breaking `assuranceLevel` / `certFormat` / `certChain` constructor options; v1 verifiers ignore the new fields.
 
-## Unreleased on `main`
+## Alpha.17 candidate
 
-The `main` branch additionally carries the **alpha.16-cycle server-surface parity wave**
-(not yet in any published package; ships with the next suite release):
+The candidate carries the server-surface parity wave planned for the next suite release:
 
 - **NOP orchestration engine** — DAG validator, condition evaluator, input mapper,
   result aggregator, task store, worker client, callback validator, instrumentation
