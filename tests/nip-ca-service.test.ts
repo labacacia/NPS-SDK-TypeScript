@@ -453,4 +453,23 @@ describe("NipCaRouter fetch", () => {
     expect(body.entries[0].nid).toBe(f.nid);
     expect(body.signature.startsWith("ed25519:")).toBe(true);
   });
+
+  it("serves an authenticated, ordered certificate inventory", async () => {
+    const { router, ca } = makeApp({ operatorApiKey: "secret" });
+    const frame = await ca.register(
+      "agent", "audit-1", AGENT_PUB, ["nwp:query"], '{"nodes":["*"]}');
+    const denied = await router.fetch(
+      new Request(`${base}/v1/certificates`));
+    expect(denied.status).toBe(401);
+
+    const response = await router.fetch(new Request(
+      `${base}/v1/certificates`,
+      { headers: { authorization: "Bearer secret" } },
+    ));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.entries).toHaveLength(1);
+    expect(body.entries[0].nid).toBe(frame.nid);
+    expect(body.entries[0].scope).toEqual({ nodes: ["*"] });
+  });
 });

@@ -49,6 +49,8 @@ import type {
   PreflightResult,
   SagaCompensationResult,
 } from "./worker-client.js";
+import type { ClusterDelegationResolver } from "./cluster-delegation.js";
+import { NWP_ANCHOR_NOT_LEADER } from "../nwp/nwp-error-codes.js";
 
 // ── Public result types ─────────────────────────────────────────────────────
 
@@ -81,7 +83,7 @@ export interface NopTaskResult {
 
 /** Simpler single-call dispatch abstraction (kept for backward compatibility). */
 export interface INopWorkerDispatcher {
-  dispatch(nodeId: string, node: DagNode, params: unknown, deadlineMs: number): Promise<NodeResult>;
+  dispatch(nodeId: string, node: DagNode, params: unknown, deadlineMs: number, targetNid?: string): Promise<NodeResult>;
 }
 
 export interface NopOrchestratorOptions {
@@ -99,6 +101,8 @@ export interface NopOrchestratorOptions {
   callbackRetryBaseDelayMs?: number;
   /** Default aggregate strategy for end nodes when no SyncFrame is present. Default: "merge". */
   defaultAggregateStrategy?: string;
+  /** Resolve cluster-targeted DAG nodes to the current active Anchor (NPS-CR-0009). */
+  clusterResolver?: ClusterDelegationResolver;
 }
 
 // ── In-memory task store ──────────────────────────────────────────────────────
@@ -125,7 +129,8 @@ interface NodeOutcome {
 
 export class NopOrchestrator {
   private readonly worker: INopWorkerClient;
-  private readonly opts: Required<NopOrchestratorOptions>;
+  private readonly opts: Required<Omit<NopOrchestratorOptions, "clusterResolver">> &
+    Pick<NopOrchestratorOptions, "clusterResolver">;
 
   constructor(
     workerOrDispatcher: INopWorkerClient | INopWorkerDispatcher,
@@ -145,7 +150,12 @@ export class NopOrchestrator {
       callbackTimeoutMs:        opts.callbackTimeoutMs        ?? 10_000,
       callbackRetryBaseDelayMs: opts.callbackRetryBaseDelayMs ?? 1000,
       defaultAggregateStrategy: opts.defaultAggregateStrategy ?? "merge",
+      clusterResolver:          opts.clusterResolver,
     };
+  }
+
+  onAnchorFailover(clusterAnchor: string, successorNid: string, clusterEpoch: number): boolean {
+    return this.opts.clusterResolver?.onAnchorFailover(clusterAnchor, successorNid, clusterEpoch) ?? false;
   }
 
   async execute(task: TaskFrame, signal?: AbortSignal): Promise<NopTaskResult> {
@@ -448,11 +458,12 @@ export class NopOrchestrator {
       undefined,
       (resolvedParams != null && typeof resolvedParams === "object" && !Array.isArray(resolvedParams))
         ? (resolvedParams as Record<string, unknown>) : { value: resolvedParams },
-      idempotencyKey, undefined,
+      idempotencyKey, node.targetClusterAnchor,
       node.id, deadlineAt, task.priority, task.delegateDepth + 1, task.context,
     );
     // Preserve the exact resolved params object for the passthrough dispatcher path.
     (frame as unknown as { resolvedParams: unknown }).resolvedParams = resolvedParams;
+    (frame as unknown as { resolvedTargetNid: string }).resolvedTargetNid = await this._resolveTarget(node);
 
     // Node-level timeout linked to the task signal.
     const nodeController = new AbortController();
@@ -490,8 +501,12 @@ export class NopOrchestrator {
 
       if (!gotFinal)
         return { state: TaskState.FAILED, errorCode: NOP_DELEGATE_TIMEOUT, errorMessage: "Stream ended without final frame." };
-      if (errorCode)
+      if (errorCode) {
+        if (node.targetClusterAnchor && errorCode === NWP_ANCHOR_NOT_LEADER) {
+          this.opts.clusterResolver?.invalidate(node.targetClusterAnchor);
+        }
         return { state: TaskState.FAILED, errorCode, errorMessage: errorMsg };
+      }
       return { state: TaskState.COMPLETED, result: finalResult };
     } catch (err) {
       if (signal.aborted) throw new AbortError();
@@ -703,6 +718,14 @@ export class NopOrchestrator {
   private _failure(taskId: string, code: string, message: string): NopTaskResult {
     return { taskId, state: TaskState.FAILED, nodeResults: {}, error: { code, message } };
   }
+
+  private async _resolveTarget(node: DagNode): Promise<string> {
+    const cluster = node.targetClusterAnchor;
+    const resolver = this.opts.clusterResolver;
+    if (!cluster || !resolver) return node.agent;
+    const info = await resolver.resolveActive(cluster);
+    return info?.activeNid ?? node.agent;
+  }
 }
 
 // ── Module-level helpers ────────────────────────────────────────────────────
@@ -728,7 +751,8 @@ function dispatcherToClient(dispatcher: INopWorkerDispatcher): INopWorkerClient 
       const deadlineMs = frame.deadlineAt ? Math.max(0, Date.parse(frame.deadlineAt) - Date.now()) : 0;
       // The dispatcher receives the DagNode via a light shim carrying id/action/agent.
       const nodeShim = { id: nodeId, action: frame.action, agent: frame.agentNid } as unknown as DagNode;
-      const r = await dispatcher.dispatch(nodeId, nodeShim, params, deadlineMs);
+      const targetNid = (frame as unknown as { resolvedTargetNid?: string }).resolvedTargetNid ?? frame.agentNid;
+      const r = await dispatcher.dispatch(nodeId, nodeShim, params, deadlineMs, targetNid);
       const { AlignStreamFrame } = await import("./frames.js");
       yield new AlignStreamFrame(
         randomId(), frame.taskId, frame.subtaskId, 0, true, frame.agentNid,

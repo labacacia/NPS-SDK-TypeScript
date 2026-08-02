@@ -14,6 +14,8 @@ export * from "./result-aggregator.js";
 export * from "./callback-validator.js";
 export * from "./worker-client.js";
 export * from "./orchestrator.js";
+export * from "./cluster-delegation.js";
+export * from "./portable-profile.js";
 
 // [I] infrastructure band — telemetry instruments
 export * from "./telemetry.js";

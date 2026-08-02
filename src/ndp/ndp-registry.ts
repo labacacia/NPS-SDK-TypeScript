@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { AnnounceFrame, NdpResolveResult } from "./frames.js";
+import { resolveCluster } from "./cluster.js";
 import {
   extractHostFromTarget,
   parseNpsTxtRecord,
@@ -58,6 +59,17 @@ export class InMemoryNdpRegistry {
       result.push(entry.frame);
     }
     return result;
+  }
+
+  /**
+   * NPS-CR-0009 — resolve a `cluster_anchor` NID to its current active Anchor: the live
+   * member with the highest `cluster_epoch`. `undefined` when the cluster is empty; throws
+   * {@link NdpClusterSplitError} on an equal-epoch split-brain. Liveness comes from
+   * {@link getAll}, which lazily purges TTL-expired entries (and an announce with `ttl == 0`
+   * evicts immediately), so an orderly shutdown removes that Anchor from the election.
+   */
+  resolveCluster(clusterAnchor: string): AnnounceFrame | undefined {
+    return resolveCluster(this, clusterAnchor);
   }
 
   async resolveWithDns(

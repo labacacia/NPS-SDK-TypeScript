@@ -86,6 +86,8 @@ export class NipCaRouter {
         return json({ public_key: this.ca.getCaPublicKey(), algorithm: "ed25519" });
 
       if (path === `${pfx}/v1/crl` && m === "GET") return this.crl();
+      if (path === `${pfx}/v1/certificates` && m === "GET")
+        return this.certificates(req);
 
       // ── Registration ──────────────────────────────────────────────────────
       if (path === `${pfx}/v1/agents/register` && m === "POST") return this.register(req, "agent");
@@ -161,7 +163,10 @@ export class NipCaRouter {
   }
 
   private async crl(): Promise<Response> {
-    const revoked = await this.ca.getCrl();
+    const revoked = [...await this.ca.getCrl()].sort((a, b) =>
+      (a.revokedAt?.getTime() ?? 0) - (b.revokedAt?.getTime() ?? 0)
+      || a.serial.localeCompare(b.serial)
+      || a.nid.localeCompare(b.nid));
     const entries = revoked.map((r) => ({
       nid: r.nid,
       serial: r.serial,
@@ -170,6 +175,30 @@ export class NipCaRouter {
     }));
     const body = { issued_by: this.opts.caNid, issued_at: this.ca.isoNow(), entries };
     return json(stripNulls({ ...body, signature: this.ca.signArtifact(body) }));
+  }
+
+  private async certificates(req: Request): Promise<Response> {
+    if (!this.isAuthorized(req)) return this.unauthorized();
+    const records = [...await this.ca.listCertificates()].sort((a, b) =>
+      a.issuedAt.getTime() - b.issuedAt.getTime()
+      || a.serial.localeCompare(b.serial));
+    return json({
+      entries: records.map((r) => stripNulls({
+        nid: r.nid,
+        entity_type: r.entityType,
+        serial: r.serial,
+        pub_key: r.pubKey,
+        capabilities: r.capabilities,
+        scope: JSON.parse(r.scopeJson) as unknown,
+        issued_by: r.issuedBy,
+        issued_at: this.ca.formatIso(r.issuedAt),
+        expires_at: this.ca.formatIso(r.expiresAt),
+        revoked_at: r.revokedAt ? this.ca.formatIso(r.revokedAt) : undefined,
+        revoke_reason: r.revokeReason,
+        nid_role: r.nidRole,
+        parent_nid: r.parentNid,
+      })),
+    });
   }
 
   // ── Registration ─────────────────────────────────────────────────────────

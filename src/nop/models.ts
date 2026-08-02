@@ -107,6 +107,13 @@ export interface DagNode {
   minRequired?:                number;
   compensate_action?:          string;
   compensate_params_mapping?:  Record<string, unknown>;
+  /**
+   * NPS-CR-0009 — cluster NID (`urn:nps:cluster:...`) this node should be delegated to.
+   * Mirrors `DelegateFrame.target_cluster_anchor`: it resolves to the cluster's current
+   * **active** Anchor rather than to a fixed NID, and re-resolves after an `anchor_failover`.
+   * When absent, {@link agent} is the target.
+   */
+  targetClusterAnchor?:        string;
 }
 
 export interface DagEdge {

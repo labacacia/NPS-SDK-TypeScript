@@ -9,8 +9,10 @@ export * from "./frames/stream-frame.js";
 export * from "./ncp-error-codes.js";
 export * from "./ncp-patch-format.js";
 export * from "./handshake.js";
+export * from "./handshake-profile.js";
 export * from "./stream-manager.js";
 export * from "./preamble.js";
+export * from "./failover-connector.js";
 // Native-mode TCP transport (NPS-1 §4.6) — ported from the .NET reference.
 // Note: the OOP frame classes in ./frames.js (HelloFrame, CapsFrame, ErrorFrame,
 // …) intentionally share names with the POJO interfaces re-exported above from

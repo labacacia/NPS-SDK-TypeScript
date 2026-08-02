@@ -44,6 +44,26 @@ export interface NipCaCrl {
   signature: string;
 }
 
+export interface NipCaCertificateRecord {
+  nid: string;
+  entity_type: string;
+  serial: string;
+  pub_key: string;
+  capabilities: readonly string[];
+  scope: unknown;
+  issued_by: string;
+  issued_at: string;
+  expires_at: string;
+  revoked_at?: string | null;
+  revoke_reason?: string | null;
+  nid_role?: string | null;
+  parent_nid?: string | null;
+}
+
+export interface NipCaCertificateList {
+  entries: readonly NipCaCertificateRecord[];
+}
+
 export interface NipCaRevokeFrame {
   frame?:       string;
   target_nid?:  string;
@@ -101,6 +121,30 @@ export class NipCaClient {
 
   getCrl(): Promise<NipCaCrl> {
     return this.getJson<NipCaCrl>(`${this.prefix}/v1/crl`);
+  }
+
+  getCertificates(bearerToken?: string): Promise<NipCaCertificateList> {
+    return this.sendJson<NipCaCertificateList>(
+      "GET", `${this.prefix}/v1/certificates`, undefined, bearerToken);
+  }
+
+  static verifyCrlSignature(crl: NipCaCrl, caPublicKey: string): boolean {
+    try {
+      const publicKey = decodeEd25519(caPublicKey);
+      const signature = decodeEd25519(crl.signature);
+      const body = {
+        issued_by: crl.issued_by,
+        issued_at: crl.issued_at,
+        entries: crl.entries,
+      };
+      return ed25519.verify(
+        signature,
+        new TextEncoder().encode(sortKeysStringify(body)),
+        publicKey,
+      );
+    } catch {
+      return false;
+    }
   }
 
   registerAgent(request: NipCaRegisterRequest, bearerToken?: string): Promise<NipCaIdentFrame> {
@@ -187,6 +231,15 @@ export class NipCaClient {
   }
 }
 
+function decodeEd25519(encoded: string): Uint8Array {
+  if (!encoded.startsWith("ed25519:")) throw new Error("Invalid Ed25519 value.");
+  const body = encoded.slice("ed25519:".length);
+  if (/^[0-9a-fA-F]{64}$/.test(body)) {
+    return new Uint8Array(Buffer.from(body, "hex"));
+  }
+  return new Uint8Array(Buffer.from(body, "base64url"));
+}
+
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   const data = text.length === 0 ? {} : JSON.parse(text) as Record<string, unknown>;
@@ -198,3 +251,8 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
     response.status,
   );
 }
+import * as ed25519 from "@noble/ed25519";
+import { sha512 } from "@noble/hashes/sha512";
+import { sortKeysStringify } from "../core/canonical-json.js";
+
+ed25519.etc.sha512Sync = (...m) => sha512(ed25519.etc.concatBytes(...m));

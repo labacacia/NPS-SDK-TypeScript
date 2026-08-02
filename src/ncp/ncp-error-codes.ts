@@ -33,6 +33,9 @@ export const NCP_ERROR_CODES = {
   NCP_ENC_AUTH_FAILED: "NCP-ENC-AUTH-FAILED",
   // v0.8 keepalive
   NCP_KEEPALIVE_TIMEOUT: "NCP-KEEPALIVE-TIMEOUT",
+  // NPS-RFC-0006 §6.3–§6.4 — native-mode session-NID binding. Also the failover trigger
+  // on the native path (NPS-CR-0009 §3.3).
+  NCP_NID_MISMATCH: "NCP-NID-MISMATCH",
   NCP_REKEY_REQUIRED: "NCP-REKEY-REQUIRED",
 } as const;
 
@@ -58,5 +61,6 @@ export const NCP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NCP-ENC-AUTH-FAILED":          "NPS-CLIENT-BAD-FRAME",
   "NCP-PREAMBLE-INVALID":         "NPS-PROTO-PREAMBLE-INVALID",
   "NCP-KEEPALIVE-TIMEOUT":        "NPS-SERVER-TIMEOUT",
+  "NCP-NID-MISMATCH":             "NPS-AUTH-UNAUTHENTICATED",
   "NCP-REKEY-REQUIRED":           "NPS-CLIENT-BAD-FRAME",
 };

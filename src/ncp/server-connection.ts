@@ -13,7 +13,12 @@ import type { Socket } from "node:net";
 import type { NpsFrameCodec } from "../core/codec.js";
 import { EncodingTier } from "../core/frames.js";
 import { HelloFrame, ErrorFrame, NcpHandshakeCapsFrame } from "./frames.js";
-import { NcpEncodingPolicy, NpsEncodingUnsupportedError } from "./encoding-policy.js";
+import { NcpEncodingPolicy } from "./encoding-policy.js";
+import {
+  negotiateHandshake,
+  type NcpHandshakeProfile,
+} from "./handshake-profile.js";
+import { NpsFrameError } from "../core/exceptions.js";
 import { NcpSession } from "./session.js";
 import { SocketFrameReader } from "./socket-frame-reader.js";
 
@@ -30,6 +35,7 @@ export class NcpServerConnection {
     reader: SocketFrameReader,
     codec: NpsFrameCodec,
     clientHello: HelloFrame,
+    private readonly _profile: NcpHandshakeProfile,
   ) {
     this._socket = socket;
     this._reader = reader;
@@ -44,14 +50,36 @@ export class NcpServerConnection {
    * with the negotiated values before being sent.
    */
   async accept(serverCaps: NcpHandshakeCapsFrame): Promise<NcpSession> {
-    const policy = NcpServerConnection.negotiateEncodingPolicy(this.clientHello);
+    const negotiation = negotiateHandshake(this._profile, this.clientHello);
+    if (negotiation.action !== "accept") {
+      const error = negotiation.error ?? "NCP-VERSION-INCOMPATIBLE";
+      await this.reject(new ErrorFrame(
+        negotiation.status ?? "NPS-PROTO-VERSION-INCOMPATIBLE",
+        error,
+        "Native NCP handshake negotiation failed.",
+      ));
+      throw new NpsFrameError(
+        `Native NCP handshake negotiation failed: ${error}`);
+    }
+    const defaultTier = negotiation.negotiatedEncoding === "msgpack"
+      ? EncodingTier.MSGPACK
+      : EncodingTier.JSON;
+    const policy = new NcpEncodingPolicy(
+      defaultTier,
+      negotiation.enabledEncodings?.includes("binary_vector.v1") === true,
+    );
     const caps = new NcpHandshakeCapsFrame(
       serverCaps.nodeId,
       serverCaps.caps,
-      NcpEncodingPolicy.encodingToken(policy.defaultTier),
-      policy.enabledEncodings,
+      negotiation.negotiatedEncoding,
+      negotiation.enabledEncodings,
       serverCaps.anchorRef,
       serverCaps.payload,
+      negotiation.sessionVersion,
+      negotiation.supportedProtocols,
+      negotiation.maxFramePayload,
+      negotiation.extSupport,
+      negotiation.maxConcurrentStreams,
     );
     const wire = this._codec.encode(caps, { overrideTier: policy.defaultTier });
     await this._write(wire);
@@ -78,28 +106,6 @@ export class NcpServerConnection {
       this._socket.once("close", () => resolve());
       this._socket.end(() => this._socket.destroy());
     });
-  }
-
-  /**
-   * Selects a stable default encoding from the client's supported_encodings
-   * list. Optional encodings such as BinaryVector are recorded as extensions,
-   * not defaults.
-   */
-  private static negotiateEncodingPolicy(hello: HelloFrame): NcpEncodingPolicy {
-    const binaryVectorEnabled = hello.supportedEncodings.includes("binary_vector.v1");
-
-    for (const enc of hello.supportedEncodings) {
-      if (enc === "msgpack") {
-        return new NcpEncodingPolicy(EncodingTier.MSGPACK, binaryVectorEnabled);
-      }
-      if (enc === "json") {
-        return new NcpEncodingPolicy(EncodingTier.JSON, binaryVectorEnabled);
-      }
-    }
-
-    throw new NpsEncodingUnsupportedError(
-      "Client did not offer a supported stable default encoding (expected msgpack or json).",
-    );
   }
 
   private _write(wire: Uint8Array): Promise<void> {

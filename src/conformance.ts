@@ -145,4 +145,23 @@ export const NODE_L2_CASES: readonly NpsConformanceCase[] = [
   c("TC-N2-Tls-02", NODE_L2, "NPS-RFC-0006", "Mutual TLS required"),
   c("TC-N2-Tls-03", NODE_L2, "NPS-RFC-0006", "Client cert trust anchor and NID binding"),
   c("TC-N2-Tls-04", NODE_L2, "NPS-RFC-0006", "IdentFrame/certificate NID mismatch"),
+  // NPS-CR-0010 §3.3 — inbound Bridge servers. Certification is per case family,
+  // all-or-nothing: all six MUST pass for an IUT declaring a non-empty
+  // `bridge_inbound_protocols`, and all six are `na` for an outbound-only or non-Bridge IUT.
+  c("TC-N2-BridgeIn-01", NODE_L2, "NPS-CR-0010", "MCP inbound serves the full required method set"),
+  c("TC-N2-BridgeIn-02", NODE_L2, "NPS-CR-0010", "gRPC inbound round-trip"),
+  c("TC-N2-BridgeIn-03", NODE_L2, "NPS-CR-0010", "A2A inbound round-trip"),
+  c("TC-N2-BridgeIn-04", NODE_L2, "NPS-CR-0010", "Bare action id resolves while ambiguity is rejected"),
+  c("TC-N2-BridgeIn-05", NODE_L2, "NPS-CR-0010", "Error mapping matches the §16.3 table"),
+  c("TC-N2-BridgeIn-06", NODE_L2, "NPS-CR-0010", "Undeclared protocol/direction is refused"),
+  // NPS-CR-0009 §3.4 — multi-Anchor high availability.
+  c("TC-N2-HA-01", NODE_L2, "NPS-CR-0009", "cluster_epoch carried on every topology read surface"),
+  c("TC-N2-HA-02", NODE_L2, "NPS-CR-0009", "anchor_failover wire shape on planned handover"),
+  c("TC-N2-HA-03", NODE_L2, "NPS-CR-0009", "anchor_failover on active loss is terminal"),
+  c("TC-N2-HA-04", NODE_L2, "NPS-CR-0009", "anchor_quorum_lost wire shape and degraded read-only operation"),
+  c("TC-N2-HA-05", NODE_L2, "NPS-CR-0009", "Standby Anchor rejects a topology write"),
+  c("TC-N2-HA-06", NODE_L2, "NPS-CR-0009", "Superseded leader is fenced"),
+  c("TC-N2-HA-07", NODE_L2, "NPS-CR-0009", "Registry resolves the highest-cluster_epoch Anchor"),
+  c("TC-N2-HA-08", NODE_L2, "NPS-CR-0009", "Equal-epoch split-brain rejected"),
+  c("TC-N2-HA-09", NODE_L2, "NPS-CR-0009", "Single-Anchor cluster stays at cluster_epoch = 1"),
 ];

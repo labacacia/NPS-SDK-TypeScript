@@ -269,6 +269,11 @@ export class NcpHandshakeCapsFrame implements NpsFrame {
     public          enabledEncodings?:   readonly string[],
     public readonly anchorRef?:         string,
     public readonly payload?:           unknown,
+    public          sessionVersion?:     string,
+    public          supportedProtocols?: readonly string[],
+    public          maxFramePayload?:    number,
+    public          extSupport?:         boolean,
+    public          maxConcurrentStreams?: number,
   ) {}
 
   toDict(): Record<string, unknown> {
@@ -277,6 +282,11 @@ export class NcpHandshakeCapsFrame implements NpsFrame {
       caps:                [...this.caps],
       negotiated_encoding: this.negotiatedEncoding ?? null,
       enabled_encodings:   this.enabledEncodings ? [...this.enabledEncodings] : null,
+      session_version:      this.sessionVersion ?? null,
+      supported_protocols:  this.supportedProtocols ? [...this.supportedProtocols] : null,
+      max_frame_payload:    this.maxFramePayload ?? null,
+      ext_support:          this.extSupport ?? null,
+      max_concurrent_streams: this.maxConcurrentStreams ?? null,
       anchor_ref:          this.anchorRef ?? null,
       payload:             this.payload   ?? null,
     };
@@ -290,6 +300,11 @@ export class NcpHandshakeCapsFrame implements NpsFrame {
       (data["enabled_encodings"]   as string[] | null) ?? undefined,
       (data["anchor_ref"]          as string | null) ?? undefined,
       (data["payload"]             as unknown) ?? undefined,
+      (data["session_version"]     as string | null) ?? undefined,
+      (data["supported_protocols"] as string[] | null) ?? undefined,
+      (data["max_frame_payload"]   as number | null) ?? undefined,
+      (data["ext_support"]         as boolean | null) ?? undefined,
+      (data["max_concurrent_streams"] as number | null) ?? undefined,
     );
   }
 }

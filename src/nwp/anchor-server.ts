@@ -17,6 +17,7 @@
 
 import { AssuranceLevel } from "../nip/assurance-level.js";
 import { ActionFrame } from "./frames.js";
+import type { AnchorEpochFence, InboundEpochFrame } from "./anchor-epoch.js";
 import type {
   MemberChanges,
   MemberInfo,
@@ -266,6 +267,40 @@ export interface AnchorNodeAppDeps {
   topologyService?: AnchorTopologyService;
   reputationEvaluator?: IReputationEvaluator;
   rateLimiter?: AnchorRateLimiter;
+  /**
+   * NPS-CR-0009 — cluster ownership state. When supplied, every inbound request passes the
+   * epoch fence first, `/invoke` additionally passes the leader check (it is this Anchor's
+   * only topology-mutating path), and every topology response is stamped with the current
+   * `cluster_epoch` per NWP §12.2. Omit it for a single-Anchor deployment.
+   */
+  epochFence?: AnchorEpochFence;
+}
+
+/** HTTP status for a topology-layer NPS status (spec/status-codes.md). */
+function topologyHttpStatus(npsStatus: string): number {
+  switch (npsStatus) {
+    case "NPS-AUTH-FORBIDDEN":  return 403;
+    case "NPS-CLIENT-CONFLICT": return 409;
+    default:                    return 400;
+  }
+}
+
+/**
+ * The `cluster_epoch` an inbound request claims. Carried either in the request body
+ * (`cluster_epoch` / `sender_anchor_nid`) or in the `X-NWP-Cluster-Epoch` /
+ * `X-NWP-Anchor-Nid` headers, so that a bodiless request can still be fenced.
+ */
+function readInboundEpoch(req: Request, body?: Record<string, unknown>): InboundEpochFrame {
+  const bodyEpoch = body?.["cluster_epoch"];
+  const headerEpoch = req.headers.get(H.HDR_CLUSTER_EPOCH);
+  const epoch = typeof bodyEpoch === "number"
+    ? bodyEpoch
+    : headerEpoch !== null && headerEpoch !== "" && !Number.isNaN(Number(headerEpoch))
+      ? Number(headerEpoch)
+      : undefined;
+  const bodyNid = body?.["sender_anchor_nid"];
+  const sender = typeof bodyNid === "string" ? bodyNid : req.headers.get(H.HDR_ANCHOR_NID) ?? undefined;
+  return { cluster_epoch: epoch, sender_anchor_nid: sender };
 }
 
 export class AnchorNodeApp {
@@ -276,6 +311,7 @@ export class AnchorNodeApp {
   private readonly handler?: AnchorInvokeHandler;
   private readonly topology?: AnchorTopologyService;
   private readonly evaluator?: IReputationEvaluator;
+  private readonly fence?: AnchorEpochFence;
   private readonly limiter: AnchorRateLimiter;
   private readonly nwmJson: string;
   private readonly actionsJson: string;
@@ -295,6 +331,7 @@ export class AnchorNodeApp {
     this.handler = deps.invokeHandler;
     this.topology = deps.topologyService;
     this.evaluator = deps.reputationEvaluator;
+    this.fence = deps.epochFence;
     this.limiter = deps.rateLimiter ?? new AllowAllRateLimiter();
     this.nwmJson = JSON.stringify(this.buildManifest());
     this.actionsJson = JSON.stringify({ actions: this.actionsDict() });
@@ -359,6 +396,10 @@ export class AnchorNodeApp {
       return this.errorResponse(400, "NPS-CLIENT-BAD-REQUEST", ErrorCodes.NWP_QUERY_FILTER_INVALID, String(e));
     }
 
+    // NPS-CR-0009 §3.2(a): the epoch fence runs first, on any inbound frame — reads included.
+    const fenced = this.applyFence(req, body, false);
+    if (fenced) return fenced;
+
     if (body["type"] !== TopologyWire.TYPE_SNAPSHOT) {
       const t = body["type"];
       return this.errorResponse(501, "NPS-SERVER-UNSUPPORTED", ErrorCodes.NWP_RESERVED_TYPE_UNSUPPORTED,
@@ -373,7 +414,9 @@ export class AnchorNodeApp {
     try {
       const request = parseSnapshotRequest(body);
       const snapshot = await this.topology.getSnapshot(request);
-      const caps = { anchor_ref: TopologyWire.SNAPSHOT_ANCHOR_REF, count: 1, data: [snapshotToDict(snapshot)] };
+      // NWP §12.2: every topology.snapshot response MUST carry the current cluster_epoch.
+      const stamped = this.fence ? this.fence.stampResponse(snapshotToDict(snapshot)) : snapshotToDict(snapshot);
+      const caps = { anchor_ref: TopologyWire.SNAPSHOT_ANCHOR_REF, count: 1, data: [stamped] };
       return new Response(JSON.stringify(caps), {
         status: 200,
         headers: {
@@ -384,8 +427,7 @@ export class AnchorNodeApp {
       });
     } catch (e) {
       if (e instanceof TopologyProtocolError) {
-        const status = e.npsStatus === "NPS-AUTH-FORBIDDEN" ? 403 : 400;
-        return this.errorResponse(status, e.npsStatus, e.nwpErrorCode, e.message);
+        return this.errorResponse(topologyHttpStatus(e.npsStatus), e.npsStatus, e.nwpErrorCode, e.message);
       }
       throw e;
     }
@@ -404,6 +446,9 @@ export class AnchorNodeApp {
       return this.errorResponse(400, "NPS-CLIENT-BAD-REQUEST", ErrorCodes.NWP_QUERY_FILTER_INVALID, String(e));
     }
 
+    const fenced = this.applyFence(req, body, false);
+    if (fenced) return fenced;
+
     if (body["type"] !== TopologyWire.TYPE_STREAM) {
       const t = body["type"];
       return this.errorResponse(501, "NPS-SERVER-UNSUPPORTED", ErrorCodes.NWP_RESERVED_TYPE_UNSUPPORTED,
@@ -421,20 +466,23 @@ export class AnchorNodeApp {
       [request, streamId] = parseStreamRequest(body);
     } catch (e) {
       if (e instanceof TopologyProtocolError) {
-        const status = e.npsStatus === "NPS-AUTH-FORBIDDEN" ? 403 : 400;
-        return this.errorResponse(status, e.npsStatus, e.nwpErrorCode, e.message);
+        return this.errorResponse(topologyHttpStatus(e.npsStatus), e.npsStatus, e.nwpErrorCode, e.message);
       }
       throw e;
     }
 
     const topology = this.topology;
     const encoder = new TextEncoder();
+    // NWP §12.2: every topology.stream response carries the current cluster_epoch.
+    const clusterEpoch = this.fence?.ownEpoch;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const writeLine = (obj: unknown) =>
           controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
-        writeLine({ kind: "ack", stream_id: streamId, status: "subscribed", last_seq: 0,
-          resumed: request.sinceVersion !== undefined });
+        const ack: Record<string, unknown> = { kind: "ack", stream_id: streamId, status: "subscribed",
+          last_seq: 0, resumed: request.sinceVersion !== undefined };
+        if (clusterEpoch !== undefined) ack["cluster_epoch"] = clusterEpoch;
+        writeLine(ack);
         try {
           for await (const ev of topology.subscribe(request)) {
             writeLine(eventToEnvelope(streamId, ev));
@@ -458,12 +506,19 @@ export class AnchorNodeApp {
   // ── /invoke ──────────────────────────────────────────────────────────────────
 
   private async handleInvoke(req: Request): Promise<Response> {
+    let body: Record<string, unknown>;
     let frame: ActionFrame;
     try {
-      frame = ActionFrame.fromDict((await req.json()) as Record<string, unknown>);
+      body = (await req.json()) as Record<string, unknown>;
+      frame = ActionFrame.fromDict(body);
     } catch (e) {
       return this.errorResponse(400, "NPS-CLIENT-BAD-REQUEST", ErrorCodes.NWP_ACTION_PARAMS_INVALID, String(e));
     }
+
+    // NPS-CR-0009 §3.2(b): `/invoke` is this Anchor's only topology-mutating path, so it is
+    // gated by the leader check as well as the fence.
+    const fenced = this.applyFence(req, body, true);
+    if (fenced) return fenced;
 
     const spec = this.opt.actions[frame.actionId];
     if (!spec) {
@@ -601,6 +656,24 @@ export class AnchorNodeApp {
   }
 
   // ── Gates / helpers ────────────────────────────────────────────────────────────
+
+  /**
+   * NPS-CR-0009 §3.2 — run the epoch fence (and, for topology writes, the leader check).
+   * Returns an error `Response` when the request is refused, `null` when it may proceed.
+   * A no-op when no {@link AnchorEpochFence} was supplied (single-Anchor deployment).
+   */
+  private applyFence(req: Request, body: Record<string, unknown> | undefined, isTopologyWrite: boolean): Response | null {
+    if (!this.fence) return null;
+    try {
+      this.fence.onInboundFrame(readInboundEpoch(req, body), isTopologyWrite);
+      return null;
+    } catch (e) {
+      if (e instanceof TopologyProtocolError) {
+        return this.errorResponse(topologyHttpStatus(e.npsStatus), e.npsStatus, e.nwpErrorCode, e.message);
+      }
+      throw e;
+    }
+  }
 
   private checkTopologyCapability(req: Request): Response | null {
     if (!this.opt.requireTopologyCapability) return null;

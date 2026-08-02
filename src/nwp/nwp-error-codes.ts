@@ -70,6 +70,7 @@ export const NWP_HTTP_CONTENT_TYPE_UNSUPPORTED = "NWP-HTTP-CONTENT-TYPE-UNSUPPOR
 export const NWP_HTTP_ACCEPT_UNSATISFIABLE    = "NWP-HTTP-ACCEPT-UNSATISFIABLE" as const;
 export const NWP_HTTP_REQUEST_ID_MISMATCH     = "NWP-HTTP-REQUEST-ID-MISMATCH" as const;
 export const NWP_HTTP_FRAME_BODY_MALFORMED    = "NWP-HTTP-FRAME-BODY-MALFORMED" as const;
+export const NWP_HTTP_BODY_TOO_LARGE          = "NWP-HTTP-BODY-TOO-LARGE" as const;
 export const NWP_CAPABILITY_ADVERTISED_UNIMPLEMENTED = "NWP-CAPABILITY-ADVERTISED-UNIMPLEMENTED" as const;
 
 // ── Topology (NPS-CR-0002) ────────────────────────────────────────────────────
@@ -77,6 +78,33 @@ export const NWP_TOPOLOGY_UNAUTHORIZED        = "NWP-TOPOLOGY-UNAUTHORIZED" as c
 export const NWP_TOPOLOGY_UNSUPPORTED_SCOPE   = "NWP-TOPOLOGY-UNSUPPORTED-SCOPE" as const;
 export const NWP_TOPOLOGY_DEPTH_UNSUPPORTED   = "NWP-TOPOLOGY-DEPTH-UNSUPPORTED" as const;
 export const NWP_TOPOLOGY_FILTER_UNSUPPORTED  = "NWP-TOPOLOGY-FILTER-UNSUPPORTED" as const;
+
+// ── Multi-Anchor HA (NPS-CR-0009) ─────────────────────────────────────────────
+/** A topology write reached a standby, or the active owner while read-only-degraded. */
+export const NWP_ANCHOR_NOT_LEADER            = "NWP-ANCHOR-NOT-LEADER" as const;
+/**
+ * An inbound frame carries a `cluster_epoch` **strictly greater** than the receiver's own:
+ * the receiver is a superseded leader and self-fences. `<=` own epoch is NOT an error.
+ */
+export const NWP_ANCHOR_EPOCH_FENCED          = "NWP-ANCHOR-EPOCH-FENCED" as const;
+
+// ── Bridge (NPS-CR-0001 outbound, NPS-CR-0010 inbound) ────────────────────────
+/** The request targets a protocol/direction pair this Bridge Node never declared. */
+export const NWP_BRIDGE_DIRECTION_UNSUPPORTED = "NWP-BRIDGE-DIRECTION-UNSUPPORTED" as const;
+/** Outbound: the invocation carries no valid `bridge_target`. */
+export const NWP_BRIDGE_TARGET_INVALID        = "NWP-BRIDGE-TARGET-INVALID" as const;
+/** Outbound: `bridge_target.protocol` is well-formed but has no registered dispatcher. */
+export const NWP_BRIDGE_PROTOCOL_UNSUPPORTED  = "NWP-BRIDGE-PROTOCOL-UNSUPPORTED" as const;
+/** Outbound: the target endpoint is invalid or disallowed. */
+export const NWP_BRIDGE_ENDPOINT_INVALID      = "NWP-BRIDGE-ENDPOINT-INVALID" as const;
+/** Outbound: the external call failed or returned an unusable response. */
+export const NWP_BRIDGE_UPSTREAM_FAILED       = "NWP-BRIDGE-UPSTREAM-FAILED" as const;
+/** Inbound: the foreign client named a tool / action / resource that is not exposed. */
+export const NWP_BRIDGE_SERVER_TOOL_NOT_FOUND = "NWP-BRIDGE-SERVER-TOOL-NOT-FOUND" as const;
+/** Inbound: no backend was configured for the NPS node the Bridge fronts (deployment fault). */
+export const NWP_BRIDGE_SERVER_DISPATCHER_MISSING = "NWP-BRIDGE-SERVER-DISPATCHER-MISSING" as const;
+/** Inbound: dispatch to the fronted NPS node failed unexpectedly. */
+export const NWP_BRIDGE_SERVER_DISPATCH_FAILED = "NWP-BRIDGE-SERVER-DISPATCH-FAILED" as const;
 
 /** Maps each NWP error code to its NPS status code. */
 export const NWP_ERROR_TO_NPS_STATUS: Record<string, string> = {
@@ -125,9 +153,20 @@ export const NWP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NWP-HTTP-ACCEPT-UNSATISFIABLE":    "NPS-CLIENT-BAD-PARAM",
   "NWP-HTTP-REQUEST-ID-MISMATCH":     "NPS-CLIENT-BAD-PARAM",
   "NWP-HTTP-FRAME-BODY-MALFORMED":    "NPS-CLIENT-BAD-FRAME",
+  "NWP-HTTP-BODY-TOO-LARGE":          "NPS-LIMIT-PAYLOAD",
   "NWP-CAPABILITY-ADVERTISED-UNIMPLEMENTED": "NPS-SERVER-UNSUPPORTED",
   "NWP-TOPOLOGY-UNAUTHORIZED":        "NPS-AUTH-FORBIDDEN",
   "NWP-TOPOLOGY-UNSUPPORTED-SCOPE":   "NPS-CLIENT-BAD-PARAM",
   "NWP-TOPOLOGY-DEPTH-UNSUPPORTED":   "NPS-CLIENT-BAD-PARAM",
   "NWP-TOPOLOGY-FILTER-UNSUPPORTED":  "NPS-CLIENT-BAD-PARAM",
+  "NWP-ANCHOR-NOT-LEADER":            "NPS-CLIENT-CONFLICT",
+  "NWP-ANCHOR-EPOCH-FENCED":          "NPS-CLIENT-CONFLICT",
+  "NWP-BRIDGE-DIRECTION-UNSUPPORTED": "NPS-SERVER-UNSUPPORTED",
+  "NWP-BRIDGE-TARGET-INVALID":        "NPS-CLIENT-UNPROCESSABLE",
+  "NWP-BRIDGE-PROTOCOL-UNSUPPORTED":  "NPS-SERVER-UNSUPPORTED",
+  "NWP-BRIDGE-ENDPOINT-INVALID":      "NPS-CLIENT-UNPROCESSABLE",
+  "NWP-BRIDGE-UPSTREAM-FAILED":       "NPS-DOWNSTREAM-UNAVAILABLE",
+  "NWP-BRIDGE-SERVER-TOOL-NOT-FOUND": "NPS-CLIENT-NOT-FOUND",
+  "NWP-BRIDGE-SERVER-DISPATCHER-MISSING": "NPS-SERVER-INTERNAL",
+  "NWP-BRIDGE-SERVER-DISPATCH-FAILED": "NPS-SERVER-INTERNAL",
 };

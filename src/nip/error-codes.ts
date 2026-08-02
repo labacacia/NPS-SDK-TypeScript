@@ -58,17 +58,26 @@ export const CA_JWS_INVALID           = "NIP-CA-JWS-INVALID" as const;
 export const CA_JWS_EXPIRED           = "NIP-CA-JWS-EXPIRED" as const;
 export const CERT_PARENT_REVOKED      = "NIP-CERT-PARENT-REVOKED" as const;
 
+// ── NPS-CR-0005 RA enrollment tiers ─────────────────────────────────────────
+export const RA_TOKEN_INVALID     = "NIP-RA-TOKEN-INVALID" as const;
+export const RA_TOKEN_EXPIRED     = "NIP-RA-TOKEN-EXPIRED" as const;
+export const RA_NID_NOT_ALLOWED   = "NIP-RA-NID-NOT-ALLOWED" as const;
+export const RA_PENDING_REJECTED  = "NIP-RA-PENDING-REJECTED" as const;
+
 // ── OCSP staple (referenced in task) ────────────────────────────────────────
 export const OCSP_STAPLE_EXPIRED      = "NIP-OCSP-STAPLE-EXPIRED" as const;
 
 // ── NIP v0.10 — node_roles ───────────────────────────────────────────────────
 export const CERT_NODE_ROLES_MISMATCH = "NIP-CERT-NODE-ROLES-MISMATCH" as const;
 
-// ── NPS-CR-0005 (RA enrollment tiers) ────────────────────────────────────────
-export const RA_TOKEN_INVALID    = "NIP-RA-TOKEN-INVALID" as const;
-export const RA_TOKEN_EXPIRED     = "NIP-RA-TOKEN-EXPIRED" as const;
-export const RA_NID_NOT_ALLOWED   = "NIP-RA-NID-NOT-ALLOWED" as const;
-export const RA_PENDING_REJECTED  = "NIP-RA-PENDING-REJECTED" as const;
+// ── NIP v0.12 — Phase-3 enforcement (§7.5) ───────────────────────────────────
+/**
+ * `IdentFrame.capabilities` claims a capability absent from the CA-attested
+ * `id-nps-capabilities` extension. Note the asymmetry with its sibling
+ * `NIP-CERT-NODE-ROLES-MISMATCH`, which maps to `NPS-CLIENT-BAD-FRAME`: this one
+ * maps to `NPS-AUTH-FORBIDDEN`.
+ */
+export const CERT_CAPABILITIES_EXCEEDED = "NIP-CERT-CAPABILITIES-EXCEEDED" as const;
 
 /** Maps each NIP error code to its NPS status code. */
 export const NIP_ERROR_TO_NPS_STATUS: Record<string, string> = {
@@ -110,10 +119,13 @@ export const NIP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NIP-CA-JWS-INVALID":                    "NPS-AUTH-UNAUTHENTICATED",
   "NIP-CA-JWS-EXPIRED":                    "NPS-AUTH-UNAUTHENTICATED",
   "NIP-CERT-PARENT-REVOKED":               "NPS-AUTH-UNAUTHENTICATED",
-  "NIP-OCSP-STAPLE-EXPIRED":               "NPS-AUTH-UNAUTHENTICATED",
-  "NIP-CERT-NODE-ROLES-MISMATCH":          "NPS-AUTH-FORBIDDEN",
   "NIP-RA-TOKEN-INVALID":                  "NPS-AUTH-UNAUTHENTICATED",
   "NIP-RA-TOKEN-EXPIRED":                  "NPS-AUTH-UNAUTHENTICATED",
   "NIP-RA-NID-NOT-ALLOWED":                "NPS-AUTH-FORBIDDEN",
   "NIP-RA-PENDING-REJECTED":               "NPS-AUTH-FORBIDDEN",
+  "NIP-OCSP-STAPLE-EXPIRED":               "NPS-AUTH-UNAUTHENTICATED",
+  // spec/error-codes.md:119 — NIP-CERT-NODE-ROLES-MISMATCH is NPS-CLIENT-BAD-FRAME,
+  // deliberately distinct from its NIP-CERT-CAPABILITIES-EXCEEDED sibling below.
+  "NIP-CERT-NODE-ROLES-MISMATCH":          "NPS-CLIENT-BAD-FRAME",
+  "NIP-CERT-CAPABILITIES-EXCEEDED":        "NPS-AUTH-FORBIDDEN",
 };

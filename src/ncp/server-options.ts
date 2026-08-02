@@ -9,6 +9,10 @@
 import type { Socket } from "node:net";
 import { DEFAULT_MAX_PAYLOAD } from "../core/frames.js";
 import { PREAMBLE_READ_TIMEOUT_MS } from "./preamble.js";
+import {
+  DEFAULT_NCP_HANDSHAKE_PROFILE,
+  type NcpHandshakeProfile,
+} from "./handshake-profile.js";
 
 export interface NcpServerOptions {
   /**
@@ -36,6 +40,12 @@ export interface NcpServerOptions {
    * read. Defaults to the NCP preamble timeout.
    */
   handshakeReadTimeoutMs?: number;
+
+  /** Separate wall-clock budget (ms) for the Hello header and payload. */
+  helloReadTimeoutMs?: number;
+
+  /** Server capabilities used for deterministic negotiation. */
+  handshakeProfile?: NcpHandshakeProfile;
 }
 
 /** Fills in defaults for any unspecified {@link NcpServerOptions} fields. */
@@ -47,5 +57,7 @@ export function resolveServerOptions(
     requireAuthenticatedStream: options?.requireAuthenticatedStream ?? false,
     maxHelloPayload: options?.maxHelloPayload ?? DEFAULT_MAX_PAYLOAD,
     handshakeReadTimeoutMs: options?.handshakeReadTimeoutMs ?? PREAMBLE_READ_TIMEOUT_MS,
+    helloReadTimeoutMs: options?.helloReadTimeoutMs ?? 5_000,
+    handshakeProfile: options?.handshakeProfile ?? DEFAULT_NCP_HANDSHAKE_PROFILE,
   };
 }

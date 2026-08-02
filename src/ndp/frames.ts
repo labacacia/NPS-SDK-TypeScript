@@ -57,6 +57,17 @@ export class AnnounceFrame implements NpsFrame {
     // (last_seen updates every heartbeat → must not require re-signing; §3.2.1).
     public readonly health?:              string, // "healthy" / "degraded" / "draining"
     public readonly last_seen?:           string, // ISO 8601 UTC liveness beat
+    // NPS-CR-0009 — epoch under which this Anchor owns its `cluster_anchor` cluster.
+    // uint64, starts at 1, strictly increases on every ownership transfer (a fencing
+    // token). Absent ⇒ 1 (single-Anchor); absence is NOT an error. IN the signed body.
+    public readonly cluster_epoch?:       number,
+    // NPS-CR-0010 — external protocols this Bridge Node serves INBOUND (external → NPS).
+    // Independent of `bridge_protocols` (outbound). Absent ⇒ [] (outbound-only Bridge).
+    // IN the signed body.
+    public readonly bridge_inbound_protocols?: string[],
+    // NDP registry monotonic sequence. Absent is allowed only by local-dev profiles; when
+    // present it is part of the signed body.
+    public readonly graph_seq?:            number,
   ) {}
 
   unsignedDict(): Record<string, unknown> {
@@ -75,6 +86,15 @@ export class AnnounceFrame implements NpsFrame {
     if (this.bridge_protocols !== undefined) d["bridge_protocols"] = this.bridge_protocols;
     if (this.activation_mode !== undefined) d["activation_mode"] = this.activation_mode;
     if (this.activation_endpoint !== undefined) d["activation_endpoint"] = this.activation_endpoint;
+    // NPS-CR-0009 / NPS-CR-0010: both participate in the Ed25519 signed body (contrast the
+    // NDP v0.9 liveness fields below). Omitted entirely when unset, so the canonical bytes of
+    // a frame that carries neither stay bit-identical to the pre-CR-0009 form — never emit
+    // `null`/`0`/`[]` in place of omission, and never normalise absent → 1 before signing.
+    if (this.cluster_epoch !== undefined) d["cluster_epoch"] = this.cluster_epoch;
+    if (this.bridge_inbound_protocols !== undefined) {
+      d["bridge_inbound_protocols"] = this.bridge_inbound_protocols;
+    }
+    if (this.graph_seq !== undefined) d["graph_seq"] = this.graph_seq;
     return d;
   }
 
@@ -104,7 +124,19 @@ export class AnnounceFrame implements NpsFrame {
       (data["heartbeat_interval_ms"]  as number | null) ?? 60_000,
       (data["health"]                 as string | null) ?? undefined,
       (data["last_seen"]              as string | null) ?? undefined,
+      (data["cluster_epoch"]          as number | null) ?? undefined,
+      (data["bridge_inbound_protocols"] as string[] | null) ?? undefined,
+      (data["graph_seq"]              as number | null) ?? undefined,
     );
+  }
+
+  /**
+   * Effective cluster epoch for comparison purposes (NPS-CR-0009 §9): an absent
+   * `cluster_epoch` reads as 1. Coercion happens **at comparison time only** — the stored
+   * frame keeps `undefined` so its canonical bytes never change.
+   */
+  get effectiveClusterEpoch(): number {
+    return this.cluster_epoch ?? 1;
   }
 }
 

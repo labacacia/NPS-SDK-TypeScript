@@ -14,10 +14,20 @@ export const BridgeProtocols = {
   STANDARD: ["http", "grpc", "mcp", "a2a"] as const,
 } as const;
 
-/** Declares which external protocols a Bridge Node deployment can reach. */
+/**
+ * Declares which external protocols a Bridge Node bridges, in each direction.
+ *
+ * - `supportedProtocols` → `Announce.bridge_protocols` (OUTBOUND: NPS → external)
+ * - `inboundProtocols` → `Announce.bridge_inbound_protocols` (INBOUND: external → NPS)
+ *
+ * Omitting `inboundProtocols` means the node exposes no inbound surface — an
+ * outbound-only Bridge Node, the only kind that existed through alpha.15. A Bridge Node
+ * MUST have at least one of the two non-empty. (NPS-CR-0010)
+ */
 export interface BridgeNodeDescriptor {
   nid: string;
   supportedProtocols: ReadonlySet<string> | string[];
+  inboundProtocols?: ReadonlySet<string> | string[];
 }
 
 /** Inbound parameter object for a bridge invocation. */

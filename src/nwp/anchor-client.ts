@@ -41,6 +41,12 @@ export interface TopologySnapshot {
   cluster_size: number;
   members: MemberInfo[];
   truncated?: boolean;
+  /**
+   * NPS-CR-0009 — epoch under which the responding Anchor owns this cluster. uint64, absent
+   * ⇒ 1. Not signed. Per NWP §12.2 every `topology.snapshot` / `topology.stream` response and
+   * every topology-mutating write MUST carry the current `cluster_epoch`.
+   */
+  cluster_epoch?: number;
 }
 
 export interface TopologyFilter {
@@ -59,13 +65,90 @@ export interface MemberChanges {
   metrics?: unknown;
 }
 
+/**
+ * `anchor_state` sub-type tags. These live on the AnchorState event type, **not** on the
+ * shared `TopologyWire` constant bag — mirroring the .NET placement.
+ */
+export const AnchorStateField = {
+  /** Anchor restarted and reset its monotonic version counter (NPS-2 §12.3). */
+  VERSION_REBASED:    "version_rebased",
+  /** Cluster ownership transferred to a peer Anchor (NPS-CR-0009). */
+  ANCHOR_FAILOVER:    "anchor_failover",
+  /** Cluster lost its ownership quorum and is now read-only (NPS-CR-0009). */
+  ANCHOR_QUORUM_LOST: "anchor_quorum_lost",
+} as const;
+
+/** `anchor_failover` reason enum (NPS-CR-0009). */
+export const AnchorFailoverReason = {
+  PLANNED:     "planned",
+  ACTIVE_LOST: "active_lost",
+} as const;
+
+/** `details` payload of an `anchor_failover` event — every key is a fixed wire key. */
+export interface AnchorFailoverDetails {
+  /** NID of the Anchor that took ownership. */
+  successor_nid: string;
+  /** The new, strictly-greater epoch. uint64. */
+  cluster_epoch: number;
+  /** `"planned"` | `"active_lost"`. */
+  reason: string;
+}
+
+/** `details` payload of an `anchor_quorum_lost` event. Both keys required, uint32. */
+export interface AnchorQuorumLostDetails {
+  quorum_size: number;
+  available: number;
+}
+
 /** Discriminated union for topology stream events (NPS-2 §12.2). */
 export type TopologyEvent =
   | { kind: "member_joined";   version: number; member: MemberInfo }
   | { kind: "member_left";     version: number; nid: string }
   | { kind: "member_updated";  version: number; nid: string; changes: MemberChanges }
+  // NPS-CR-0009 sub-types, modelled as their own variants of the union so that `details`
+  // is typed rather than `unknown` when the sub-type tag is known.
+  | { kind: "anchor_state";    version: number; field: "anchor_failover";    details: AnchorFailoverDetails }
+  | { kind: "anchor_state";    version: number; field: "anchor_quorum_lost"; details: AnchorQuorumLostDetails }
   | { kind: "anchor_state";    version: number; field: string; details?: unknown }
   | { kind: "resync_required"; version: 0;      reason: string };
+
+/** An `anchor_state` event, narrowed. */
+export type AnchorStateEvent = Extract<TopologyEvent, { kind: "anchor_state" }>;
+
+/**
+ * NPS-CR-0009 `anchor_failover`: cluster ownership moved to `successorNid` at `clusterEpoch`.
+ * `reason` defaults to `"planned"` (the factory default asserted by the reference tests).
+ */
+export function anchorFailoverEvent(
+  successorNid: string,
+  clusterEpoch: number,
+  reason: string = AnchorFailoverReason.PLANNED,
+  version = 0,
+): AnchorStateEvent {
+  return {
+    kind: "anchor_state",
+    version,
+    field: AnchorStateField.ANCHOR_FAILOVER,
+    details: { successor_nid: successorNid, cluster_epoch: clusterEpoch, reason },
+  };
+}
+
+/**
+ * NPS-CR-0009 `anchor_quorum_lost`: the cluster is read-only (degraded); only `available`
+ * of `quorumSize` Anchors are reachable.
+ */
+export function anchorQuorumLostEvent(
+  quorumSize: number,
+  available: number,
+  version = 0,
+): AnchorStateEvent {
+  return {
+    kind: "anchor_state",
+    version,
+    field: AnchorStateField.ANCHOR_QUORUM_LOST,
+    details: { quorum_size: quorumSize, available },
+  };
+}
 
 /**
  * Surfaces an Anchor-side topology error to the caller. `nwpErrorCode` matches
@@ -279,6 +362,10 @@ function tryParseStreamError(line: string): AnchorTopologyError | null {
   }
 }
 
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 /** Parses one NDJSON event line into a `TopologyEvent`, or null if unrecognised. */
 function parseTopologyEvent(line: string): TopologyEvent | null {
   let obj: Record<string, unknown>;
@@ -318,13 +405,33 @@ function parseTopologyEvent(line: string): TopologyEvent | null {
         changes: (payload["changes"] ?? {}) as MemberChanges,
       };
 
-    case EVENT_ANCHOR_STATE:
-      return {
-        kind:    "anchor_state",
-        version,
-        field:   typeof payload["field"] === "string" ? payload["field"] : "",
-        details: payload["details"],
-      };
+    case EVENT_ANCHOR_STATE: {
+      const field   = typeof payload["field"] === "string" ? payload["field"] : "";
+      const details = payload["details"];
+      // NPS-CR-0009 sub-types decode into their typed `details` shape; every other
+      // sub-type (including ones this SDK does not know) passes through unchanged —
+      // subscribers MUST ignore unknown `anchor_state` sub-types.
+      if (field === AnchorStateField.ANCHOR_FAILOVER && isObject(details)) {
+        return {
+          kind: "anchor_state", version, field: AnchorStateField.ANCHOR_FAILOVER,
+          details: {
+            successor_nid: String(details["successor_nid"] ?? ""),
+            cluster_epoch: Number(details["cluster_epoch"] ?? 1),
+            reason:        String(details["reason"] ?? AnchorFailoverReason.PLANNED),
+          },
+        };
+      }
+      if (field === AnchorStateField.ANCHOR_QUORUM_LOST && isObject(details)) {
+        return {
+          kind: "anchor_state", version, field: AnchorStateField.ANCHOR_QUORUM_LOST,
+          details: {
+            quorum_size: Number(details["quorum_size"] ?? 0),
+            available:   Number(details["available"] ?? 0),
+          },
+        };
+      }
+      return { kind: "anchor_state", version, field, details };
+    }
 
     case EVENT_RESYNC_REQUIRED:
       return {

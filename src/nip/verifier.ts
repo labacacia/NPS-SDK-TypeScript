@@ -34,6 +34,11 @@ import * as cf from "./cert-format.js";
 import * as ec from "./error-codes.js";
 import type { IdentFrame } from "./frames.js";
 import { verify as verifyX509 } from "./x509/verifier.js";
+import {
+  NipRevocationEvaluation,
+  type NipRevocationMode,
+} from "./revocation-policy.js";
+import { enforcePhase3 } from "./phase3-enforcer.js";
 
 // noble/ed25519 needs sha512 wired up.
 ed25519.etc.sha512Sync = (...m) => sha512(ed25519.etc.concatBytes(...m));
@@ -96,6 +101,10 @@ export interface NipVerifierOptions {
   ocspUrl?:             string;
   /** When true, OCSP transport failures pass through. Default is fail-closed. */
   ocspFailOpen?:        boolean;
+  /** Required rejects identities when no revocation source is configured. */
+  revocationMode?:       NipRevocationMode;
+  /** NIP v0.12 phase3_enforcement; default false until the beta flag day. */
+  phase3Enforcement?:    boolean;
   /**
    * Optional fetch override (for tests). Defaults to the global `fetch`.
    * Follows the web-standard fetch signature.
@@ -266,6 +275,9 @@ export class NipIdentVerifier {
           x509Result.errorCode ?? ec.CERT_FORMAT_INVALID,
           x509Result.message   ?? "X.509 chain validation failed");
       }
+      if (this.options.phase3Enforcement === true) {
+        return enforcePhase3(frame, x509Result.leaf!);
+      }
     }
     return ok();
   }
@@ -277,43 +289,60 @@ export class NipIdentVerifier {
   ): Promise<NipIdentVerifyResult> {
     const serial = identSerial(frame);
     const opts = this.options;
+    const evaluation = new NipRevocationEvaluation(
+      opts.revocationMode ?? "if_configured",
+      opts.ocspFailOpen ?? false,
+    );
 
     // Local CRL first (fast, no network).
-    if (serial !== undefined) {
+    if (opts.localRevokedSerials !== undefined) {
       const local = opts.localRevokedSerials;
-      const revoked = local instanceof Set
+      const revoked = serial !== undefined && (local instanceof Set
         ? local.has(serial)
         : Array.isArray(local)
           ? local.includes(serial)
-          : false;
-      if (revoked) {
-        return fail(4, ec.CERT_REVOKED,
-          `Certificate serial ${serial} is in the local revocation list.`);
-      }
+          : false);
+      const result = evaluation.observe(
+        "local_crl", revoked ? "revoked" : "good");
+      if (result) return revocationResult(result);
     }
 
     // Live revocation callback.
     if (opts.revocationCheck) {
-      const cbResult = await opts.revocationCheck(frame, signal);
-      if (cbResult && cbResult.valid === false) return cbResult;
+      try {
+        const cbResult = await opts.revocationCheck(frame, signal);
+        if (cbResult && cbResult.valid === false) return cbResult;
+        const result = evaluation.observe("callback", "good");
+        if (result) return revocationResult(result);
+      } catch {
+        const result = evaluation.observe("callback", "unavailable");
+        if (result) return revocationResult(result);
+      }
     }
 
     // Revocation store lookup by serial.
-    if (opts.revocationStore && serial !== undefined) {
-      const record = await opts.revocationStore.getBySerial(serial, signal);
-      if (record && record.revokedAt) {
-        return fail(4, ec.CERT_REVOKED,
-          `Certificate serial ${serial} was revoked at ${record.revokedAt}: ${record.revokeReason ?? ""}`);
+    if (opts.revocationStore) {
+      try {
+        if (serial === undefined) throw new Error("Certificate serial is missing.");
+        const record = await opts.revocationStore.getBySerial(serial, signal);
+        const result = evaluation.observe(
+          "ca_store", record?.revokedAt ? "revoked" : "good");
+        if (result) return revocationResult(result);
+      } catch {
+        const result = evaluation.observe("ca_store", "unavailable");
+        if (result) return revocationResult(result);
       }
     }
 
     // OCSP call (optional).
     if (opts.ocspUrl) {
-      return this.ocspCheck(frame.nid, signal);
+      const ocsp = await this.ocspCheck(frame.nid, signal);
+      if (!ocsp.valid) return ocsp;
+      const result = evaluation.observe("ocsp", "good");
+      if (result) return revocationResult(result);
     }
 
-    // Pass-through when revocation is unconfigured.
-    return ok();
+    return revocationResult(evaluation.complete());
   }
 
   private async ocspCheck(nid: string, signal?: AbortSignal): Promise<NipIdentVerifyResult> {
@@ -323,6 +352,7 @@ export class NipIdentVerifier {
     try {
       const resp = await doFetch(url, { signal });
       if (!resp.ok) {
+        if (this.options.ocspFailOpen) return ok();
         return fail(4, ec.OCSP_UNAVAILABLE,
           `OCSP endpoint returned ${resp.status}.`);
       }
@@ -379,6 +409,20 @@ export class NipIdentVerifier {
 
     return pattern.toLowerCase() === path.toLowerCase();
   }
+}
+
+function revocationResult(result: {
+  valid: boolean;
+  stepFailed: number;
+  errorCode?: string;
+}): NipIdentVerifyResult {
+  return result.valid
+    ? ok()
+    : fail(
+      result.stepFailed,
+      result.errorCode ?? ec.OCSP_UNAVAILABLE,
+      "Live revocation verification failed.",
+    );
 }
 
 // ── Frame-shape adapters ──────────────────────────────────────────────────────

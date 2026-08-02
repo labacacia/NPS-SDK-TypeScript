@@ -10,6 +10,8 @@ export * from "./assurance-level.js";
 export * from "./cert-format.js";
 export * from "./error-codes.js";
 export * from "./verifier.js";
+export * from "./phase3-enforcer.js";
+export * from "./revocation-policy.js";
 export * from "./trust-frame-validator.js";
 export * from "./ca-client.js";
 

@@ -12,10 +12,10 @@
 
 import * as net from "node:net";
 import type { NpsFrameCodec } from "../core/codec.js";
-import { FrameType } from "../core/frames.js";
 import { NpsFrameError } from "../core/exceptions.js";
 import { HelloFrame } from "./frames.js";
 import { validatePreamble, PREAMBLE_LENGTH } from "./preamble.js";
+import { evaluateHelloHeader } from "./handshake-profile.js";
 import { NcpServerConnection } from "./server-connection.js";
 import { SocketFrameReader } from "./socket-frame-reader.js";
 import {
@@ -110,15 +110,16 @@ export class NcpServer {
       socket = await this._authenticate(socket);
 
       const reader = new SocketFrameReader(socket);
-      const readWork = this._readHandshake(socket, reader);
-      const conn =
-        this._options.handshakeReadTimeoutMs > 0
-          ? await withTimeout(
-              readWork,
-              this._options.handshakeReadTimeoutMs,
-              "NCP handshake read timed out.",
-            )
-          : await readWork;
+      await withOptionalTimeout(
+        this._readPreamble(reader),
+        this._options.handshakeReadTimeoutMs,
+        "NCP preamble read timed out.",
+      );
+      const conn = await withOptionalTimeout(
+        this._readHello(socket, reader),
+        this._options.helloReadTimeoutMs,
+        "NCP Hello read timed out.",
+      );
       this._deliver(conn);
     } catch {
       // A failed handshake closes the individual connection but does not tear
@@ -146,29 +147,20 @@ export class NcpServer {
     return authenticated;
   }
 
-  private async _readHandshake(
+  private async _readPreamble(reader: SocketFrameReader): Promise<void> {
+    const preamble = await reader.readExactly(PREAMBLE_LENGTH);
+    validatePreamble(preamble);
+  }
+
+  private async _readHello(
     socket: net.Socket,
     reader: SocketFrameReader,
   ): Promise<NcpServerConnection> {
-    // 1 — read & validate preamble.
-    const preamble = await reader.readExactly(PREAMBLE_LENGTH);
-    validatePreamble(preamble);
-
-    // 2 — read frame header.
     const { header } = await reader.readFrameHeader();
-
-    if (header.frameType !== FrameType.HELLO) {
-      throw new NpsFrameError(
-        `Expected HelloFrame (0x${FrameType.HELLO.toString(16).padStart(2, "0")}) as first frame ` +
-          `after preamble, got 0x${header.frameType.toString(16).padStart(2, "0")}.`,
-      );
-    }
-
-    if (header.payloadLength > this._options.maxHelloPayload) {
-      throw new NpsFrameError(
-        `HelloFrame payload length ${header.payloadLength} exceeds configured maximum ` +
-          `${this._options.maxHelloPayload} bytes.`,
-      );
+    const headerDecision = evaluateHelloHeader(
+      header, 0, 0, this._options.maxHelloPayload);
+    if (headerDecision.action !== "continue") {
+      throw new NpsFrameError("Invalid native NCP Hello header.");
     }
 
     // 3 — read payload and rebuild the full wire frame for the codec.
@@ -182,8 +174,22 @@ export class NcpServer {
       throw new NpsFrameError("First frame after preamble did not decode to a HelloFrame.");
     }
 
-    return new NcpServerConnection(socket, reader, this._codec, hello);
+    return new NcpServerConnection(
+      socket,
+      reader,
+      this._codec,
+      hello,
+      this._options.handshakeProfile,
+    );
   }
+}
+
+function withOptionalTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return ms > 0 ? withTimeout(promise, ms, message) : promise;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {

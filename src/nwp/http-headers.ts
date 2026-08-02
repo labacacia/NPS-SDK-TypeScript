@@ -14,6 +14,10 @@ export const HDR_CAPABILITIES = "X-NWP-Capabilities";
 export const HDR_DEPTH = "X-NWP-Depth";
 export const HDR_ENCODING = "X-NWP-Encoding";
 export const HDR_TOKENIZER = "X-NWP-Tokenizer";
+/** NPS-CR-0009 — `cluster_epoch` an inbound request claims, for the Anchor epoch fence. */
+export const HDR_CLUSTER_EPOCH = "X-NWP-Cluster-Epoch";
+/** NPS-CR-0009 — NID of the sending Anchor, used as `successor_nid` when the fence fires. */
+export const HDR_ANCHOR_NID = "X-NWP-Anchor-Nid";
 
 // Response headers
 export const HDR_SCHEMA = "X-NWP-Schema";
@@ -28,5 +32,7 @@ export const HDR_BAN_EXPIRES = "X-NWP-Ban-Expires";
 
 // MIME types
 export const MIME_FRAME = "application/nwp-frame";
+export const MIME_LEGACY_FRAME = "application/x-nps-frame";
 export const MIME_CAPSULE = "application/nwp-capsule";
+export const MIME_ERROR = "application/nwp-error+json";
 export const MIME_MANIFEST = "application/nwp-manifest+json";

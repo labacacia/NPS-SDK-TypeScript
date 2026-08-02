@@ -30,6 +30,13 @@ export const NDP_FEDERATION_LOOP           = "NDP-FEDERATION-LOOP" as const;
 /** Announce not received within heartbeat_interval_ms × 3 dead-peer threshold (v0.9) */
 export const NDP_ANNOUNCE_STALE            = "NDP-ANNOUNCE-STALE" as const;
 
+// ── Multi-Anchor HA (NPS-CR-0009) ────────────────────────────────────────────
+/**
+ * Two or more live Anchor announcements advertise the same top `cluster_epoch` for one
+ * `cluster_anchor` cluster (split-brain). The Registry refuses to resolve arbitrarily.
+ */
+export const NDP_CLUSTER_SPLIT             = "NDP-CLUSTER-SPLIT" as const;
+
 /** Maps each NDP error code to its NPS status code. */
 export const NDP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NDP-RESOLVE-NOT-FOUND":          "NPS-CLIENT-NOT-FOUND",
@@ -51,4 +58,5 @@ export const NDP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NDP-GRAPH-TOO-LARGE":            "NPS-LIMIT-PAYLOAD",
   "NDP-FEDERATION-LOOP":            "NPS-CLIENT-CONFLICT",
   "NDP-ANNOUNCE-STALE":             "NPS-CLIENT-NOT-FOUND",
+  "NDP-CLUSTER-SPLIT":              "NPS-CLIENT-CONFLICT",
 };

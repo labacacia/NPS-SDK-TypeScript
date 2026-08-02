@@ -19,6 +19,10 @@ export const EKU_CA_INTERMEDIATE_AGENT = `${EKU_ARC}.3`;
 
 // ── Custom extensions ────────────────────────────────────────────────────────
 export const NID_ASSURANCE_LEVEL = `${EXTENSION_ARC}.1`;
+/** `id-nps-node-roles` — SEQUENCE OF UTF8String, the CA-attested node-role set (NIP v0.10). */
+export const ID_NPS_NODE_ROLES   = `${EXTENSION_ARC}.2`;
+/** `id-nps-capabilities` — SEQUENCE OF UTF8String, the CA-attested capability set (NIP v0.12). */
+export const ID_NPS_CAPABILITIES = `${EXTENSION_ARC}.3`;
 
 // ── Ed25519 algorithm OID per RFC 8410 ───────────────────────────────────────
 export const ED25519 = "1.3.101.112";
