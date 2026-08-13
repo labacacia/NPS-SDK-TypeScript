@@ -108,7 +108,7 @@ import {
 
 // ── NPS Status Codes ──────────────────────────────────────────────────────────
 
-describe("NPS status codes — completeness (25 spec codes + extras)", () => {
+describe("NPS status codes — completeness (26 spec codes + extras)", () => {
   const codes = Object.values(NpsStatusCodes);
 
   it("contains all 3 success codes", () => {

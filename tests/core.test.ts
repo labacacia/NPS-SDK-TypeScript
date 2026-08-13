@@ -260,12 +260,13 @@ describe("NpsFrameCodec — NCP round-trips", () => {
   });
 
   it("encodes/decodes CapsFrame", () => {
-    const frame = new CapsFrame(aid, 2, [{ id: 1 }, { id: 2 }], "cursor:X", 100, true, "cl100k");
+    const frame = new CapsFrame(aid, 2, [{ id: 1 }, { id: 2 }], "cursor:X", 100, true, "cl100k", "req-caps-1");
     const out   = codec.decode(codec.encode(frame)) as CapsFrame;
     expect(out).toBeInstanceOf(CapsFrame);
     expect(out.count).toBe(2);
     expect(out.nextCursor).toBe("cursor:X");
     expect(out.tokenizerUsed).toBe("cl100k");
+    expect(out.requestId).toBe("req-caps-1");
   });
 
   it("encodes/decodes ErrorFrame", () => {

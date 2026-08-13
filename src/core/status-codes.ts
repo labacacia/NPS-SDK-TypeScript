@@ -44,6 +44,7 @@ export const NpsStatusCodes = {
   NPS_LIMIT_RATE: "NPS-LIMIT-RATE",
   NPS_LIMIT_BUDGET: "NPS-LIMIT-BUDGET",
   NPS_LIMIT_PAYLOAD: "NPS-LIMIT-PAYLOAD",
+  NPS_LIMIT_RESOURCE: "NPS-LIMIT-RESOURCE",
   /** Generic quota/resource limit exceeded */
   NPS_LIMIT_EXCEEDED: "NPS-LIMIT-EXCEEDED",
 
@@ -90,6 +91,7 @@ export const HTTP_STATUS_MAP: Record<NpsStatusCode, number> = {
   "NPS-LIMIT-RATE":                  429,
   "NPS-LIMIT-BUDGET":                429,
   "NPS-LIMIT-PAYLOAD":               413,
+  "NPS-LIMIT-RESOURCE":              429,
   "NPS-LIMIT-EXCEEDED":              429,
 
   "NPS-PROTO-VERSION-INCOMPATIBLE":  426,

@@ -18,13 +18,14 @@ describe("NwpNativeNodeServer", () => {
     });
 
     const out = await server.dispatchWire(
-      codec.encode(new QueryFrame("sha256:a"), { overrideTier: EncodingTier.MSGPACK }),
+      codec.encode(QueryFrame.fromDict({ anchor_ref: "sha256:a", request_id: "req-query-1" }), { overrideTier: EncodingTier.MSGPACK }),
     );
     const frame = codec.decode(out);
 
     expect(frame).toBeInstanceOf(CapsFrame);
     expect((frame as CapsFrame).count).toBe(1);
     expect((frame as CapsFrame).data[0]?.id).toBe(42);
+    expect((frame as CapsFrame).requestId).toBe("req-query-1");
   });
 
   it("serves frames from an async chunk source", async () => {
@@ -33,7 +34,7 @@ describe("NwpNativeNodeServer", () => {
       codec,
       actionHandler: (frame) => ({ action: frame.actionId }),
     });
-    const request = codec.encode(new ActionFrame("ping"), { overrideTier: EncodingTier.MSGPACK });
+    const request = codec.encode(new ActionFrame("ping", undefined, undefined, undefined, undefined, "req-action-1"), { overrideTier: EncodingTier.MSGPACK });
     const writes: Uint8Array[] = [];
 
     await server.serve([request.slice(0, 2), request.slice(2)], {
@@ -43,6 +44,7 @@ describe("NwpNativeNodeServer", () => {
     const frame = codec.decode(writes[0]!);
     expect(frame).toBeInstanceOf(CapsFrame);
     expect((frame as CapsFrame).data[0]?.action).toBe("ping");
+    expect((frame as CapsFrame).requestId).toBe("req-action-1");
   });
 
   it("rejects unnegotiated BinaryVector frames", async () => {

@@ -2,19 +2,19 @@
 
 # @labacacia/nps-sdk — TypeScript / Node.js
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.16-orange.svg)](../../CHANGELOG.cn.md)
-[![NCP](https://img.shields.io/badge/NCP-v0.9-5b8cff.svg)]()
-[![NWP](https://img.shields.io/badge/NWP-v0.14-4af0b0.svg)]()
-[![NIP](https://img.shields.io/badge/NIP-v0.10-7b61ff.svg)]()
-[![NDP](https://img.shields.io/badge/NDP-v0.9-f0a050.svg)]()
-[![NOP](https://img.shields.io/badge/NOP-v0.7-ff8c42.svg)]()
+[![Candidate](https://img.shields.io/badge/candidate-v1.0.0--alpha.17-blue.svg)](../../CHANGELOG.cn.md)
+[![NCP](https://img.shields.io/badge/NCP-v0.11-5b8cff.svg)]()
+[![NWP](https://img.shields.io/badge/NWP-v0.20-4af0b0.svg)]()
+[![NIP](https://img.shields.io/badge/NIP-v0.13-7b61ff.svg)]()
+[![NDP](https://img.shields.io/badge/NDP-v0.12-f0a050.svg)]()
+[![NOP](https://img.shields.io/badge/NOP-v0.9-ff8c42.svg)]()
 
 面向 **Neural Protocol Suite (NPS)** 的 TypeScript SDK —— 为 AI Agent 设计的协议族。
 属 [LabAcacia](https://github.com/LabAcacia) / INNO LOTUS PTY LTD 开源生态。
 
 ## 状态
 
-**v1.0.0-alpha.16 — RFC-0002 跨 SDK 端口波（第三棒）** · 5 个协议 · 271 个测试 · 覆盖率 ≥ 98%
+**v1.0.0-alpha.18 候选 —— 可移植协议一致性** · 5 个协议
 
 Alpha.14 候选新增：远程 NIP CA 类型化客户端（`NipCaClient`）、native-mode NWP 服务端 helper（`NwpNativeNodeServer`）和 TC-N1/TC-N2 一致性 manifest helper（`@labacacia/nps-sdk/conformance`）。
 
@@ -32,15 +32,15 @@ Alpha.14 候选新增：远程 NIP CA 类型化客户端（`NipCaClient`）、na
 - `nip.acme` —— `AcmeClient` + 进程内 `AcmeServer` + JWS / messages helpers（RFC 8555 + RFC 8037 EdDSA）。
 - `IdentFrame` 扩展非破坏性可选构造参数 `assuranceLevel` / `certFormat` / `certChain`；v1 verifier 忽略新字段。
 
-## main 分支未发布内容
+## Alpha.17 可移植 Profile
 
-`main` 分支额外携带 **alpha.16 周期的服务端面 parity 移植**（尚未进入任何已发布包；随下一个套件版本发布）：
+- NCP 0.11 有界原生服务握手与确定性 Caps 协商。
+- NWP 0.20 可移植 Node/Bridge serving 与 Bridge 生命周期。
+- NIP 0.13 可移植 CA、实时吊销、签名 CRL 与验证策略。
+- NDP 0.12 签名 Announce 准入及 registry 冲突/liveness 策略。
+- NOP 0.9 确定性编排、callback 安全、委派、租约与 CR-0007 runtime 决策。
 
-- **NOP 编排引擎** —— DAG 校验器、条件求值器、输入映射、结果聚合、任务存储、Worker 客户端、回调校验、instrumentation
-- **NCP 原生模式传输** —— server、session、client、帧 IO、握手 caps、编码策略、patch 格式
-- **NIP CA 服务** —— CA router + RA 准入模型、SQL CA store、TrustFrame 校验器、完整六步 §7 `VerifyFull` 验证器
-- **NWP 服务端面**扩展（memory/complex node 服务）
-- **Daemon observability**（health / metrics / logging / shutdown）与 **telemetry**
+五个 Profile 均消费 [`spec/conformance`](../../spec/conformance/) 下的语言无关 fixture。
 
 ## 安装
 

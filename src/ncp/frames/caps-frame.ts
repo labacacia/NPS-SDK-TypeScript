@@ -26,6 +26,7 @@ export interface CapsFrame {
   token_est?: number;
   tokenizer_used?: string;
   cached?: boolean;
+  request_id?: string;
   inline_anchor?: CapsFrameInlineAnchor;
 }
 

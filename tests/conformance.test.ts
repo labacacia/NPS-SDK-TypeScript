@@ -32,7 +32,7 @@ describe("conformance", () => {
       iutVersion: "0.1.0",
       iutNid: "urn:nps:node:example.test:node-1",
       peerName: "reference",
-      peerVersion: "1.0.0-alpha.17",
+      peerVersion: "1.0.0-alpha.18",
       results: NODE_L1_CASES.map((c) => ({ id: c.id, result: c.optional ? "na" : "pass" })),
     });
 
@@ -46,7 +46,7 @@ describe("conformance", () => {
       iutVersion: "0.1.0",
       iutNid: "urn:nps:node:example.test:node-1",
       peerName: "reference",
-      peerVersion: "1.0.0-alpha.17",
+      peerVersion: "1.0.0-alpha.18",
       results: NODE_L1_CASES.slice(0, -1).map((c) => ({ id: c.id, result: "pass" })),
     });
 

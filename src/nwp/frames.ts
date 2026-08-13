@@ -165,6 +165,7 @@ export class ActionFrame implements NpsFrame {
     public readonly async_?:         boolean,
     public readonly idempotencyKey?: string,
     public readonly timeoutMs?:      number,
+    public readonly requestId?:      string,
   ) {}
 
   toDict(): Record<string, unknown> {
@@ -175,6 +176,7 @@ export class ActionFrame implements NpsFrame {
       async:           this.async_          ?? false,
       idempotency_key: this.idempotencyKey  ?? null,
       timeout_ms:      this.timeoutMs       ?? null,
+      request_id:      this.requestId       ?? null,
     };
   }
 
@@ -185,6 +187,7 @@ export class ActionFrame implements NpsFrame {
       (data["async"]           as boolean | null) ?? undefined,
       (data["idempotency_key"] as string  | null) ?? undefined,
       (data["timeout_ms"]      as number  | null) ?? undefined,
+      (data["request_id"]      as string  | null) ?? undefined,
     );
   }
 }

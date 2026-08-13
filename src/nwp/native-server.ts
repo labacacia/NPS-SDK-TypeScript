@@ -100,7 +100,7 @@ export class NwpNativeNodeServer {
     if (this.queryHandler === undefined) {
       throw new Error("No native NWP query handler configured.");
     }
-    return coerceQueryResult(await this.queryHandler(frame), this.anchorRef);
+    return withRequestId(coerceQueryResult(await this.queryHandler(frame), this.anchorRef), frame.requestId);
   }
 
   private async dispatchAction(frame: ActionFrame): Promise<NpsFrame> {
@@ -108,9 +108,10 @@ export class NwpNativeNodeServer {
       throw new Error("No native NWP action handler configured.");
     }
     const result = await this.actionHandler(frame);
+    if (result instanceof CapsFrame) return withRequestId(result, frame.requestId);
     if (isNpsFrame(result)) return result;
-    if (result === undefined || result === null) return new CapsFrame(this.anchorRef, 0, []);
-    return new CapsFrame(this.anchorRef, 1, [result as Record<string, unknown>]);
+    if (result === undefined || result === null) return new CapsFrame(this.anchorRef, 0, [], undefined, undefined, undefined, undefined, frame.requestId);
+    return new CapsFrame(this.anchorRef, 1, [result as Record<string, unknown>], undefined, undefined, undefined, undefined, frame.requestId);
   }
 }
 
@@ -144,6 +145,20 @@ function coerceQueryResult(
 function isNpsFrame(value: unknown): value is NpsFrame {
   return typeof value === "object" && value !== null &&
     "frameType" in value && "preferredTier" in value && "toDict" in value;
+}
+
+function withRequestId(frame: CapsFrame, requestId: string | undefined): CapsFrame {
+  if (requestId === undefined) return frame;
+  return new CapsFrame(
+    frame.anchorRef,
+    frame.count,
+    frame.data,
+    frame.nextCursor,
+    frame.tokenEst,
+    frame.cached,
+    frame.tokenizerUsed,
+    requestId,
+  );
 }
 
 function estimateTokens(rows: readonly unknown[]): number {

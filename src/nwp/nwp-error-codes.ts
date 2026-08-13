@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 LabAcacia / INNO LOTUS PTY LTD
 //
-// NWP Error Codes — all 53 protocol error codes per spec/error-codes.md
+// NWP Error Codes — canonical wire constants from spec/error-codes.md
 
 // ── Auth / NID ────────────────────────────────────────────────────────────────
 export const NWP_AUTH_NID_SCOPE_VIOLATION     = "NWP-AUTH-NID-SCOPE-VIOLATION" as const;
@@ -32,6 +32,13 @@ export const NWP_QUERY_STREAM_UNSUPPORTED     = "NWP-QUERY-STREAM-UNSUPPORTED" a
 export const NWP_ACTION_NOT_FOUND             = "NWP-ACTION-NOT-FOUND" as const;
 export const NWP_ACTION_PARAMS_INVALID        = "NWP-ACTION-PARAMS-INVALID" as const;
 export const NWP_ACTION_IDEMPOTENCY_CONFLICT  = "NWP-ACTION-IDEMPOTENCY-CONFLICT" as const;
+export const NWP_LLM_CONTEXT_NOT_FOUND       = "NWP-LLM-CONTEXT-NOT-FOUND" as const;
+export const NWP_LLM_CONTEXT_EXPIRED         = "NWP-LLM-CONTEXT-EXPIRED" as const;
+export const NWP_LLM_CONTEXT_VERSION_CONFLICT = "NWP-LLM-CONTEXT-VERSION-CONFLICT" as const;
+export const NWP_LLM_CONTEXT_BINDING_MISMATCH = "NWP-LLM-CONTEXT-BINDING-MISMATCH" as const;
+export const NWP_LLM_CONTEXT_FORBIDDEN       = "NWP-LLM-CONTEXT-FORBIDDEN" as const;
+export const NWP_LLM_CONTEXT_LIMIT_EXCEEDED  = "NWP-LLM-CONTEXT-LIMIT-EXCEEDED" as const;
+export const NWP_LLM_CONTEXT_OPERATION_UNSUPPORTED = "NWP-LLM-CONTEXT-OPERATION-UNSUPPORTED" as const;
 
 // ── Async task ────────────────────────────────────────────────────────────────
 export const NWP_TASK_NOT_FOUND               = "NWP-TASK-NOT-FOUND" as const;
@@ -129,6 +136,13 @@ export const NWP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NWP-ACTION-NOT-FOUND":             "NPS-CLIENT-NOT-FOUND",
   "NWP-ACTION-PARAMS-INVALID":        "NPS-CLIENT-UNPROCESSABLE",
   "NWP-ACTION-IDEMPOTENCY-CONFLICT":  "NPS-CLIENT-CONFLICT",
+  "NWP-LLM-CONTEXT-NOT-FOUND":       "NPS-CLIENT-NOT-FOUND",
+  "NWP-LLM-CONTEXT-EXPIRED":         "NPS-CLIENT-GONE",
+  "NWP-LLM-CONTEXT-VERSION-CONFLICT": "NPS-CLIENT-CONFLICT",
+  "NWP-LLM-CONTEXT-BINDING-MISMATCH": "NPS-CLIENT-CONFLICT",
+  "NWP-LLM-CONTEXT-FORBIDDEN":       "NPS-AUTH-FORBIDDEN",
+  "NWP-LLM-CONTEXT-LIMIT-EXCEEDED":  "NPS-LIMIT-RESOURCE",
+  "NWP-LLM-CONTEXT-OPERATION-UNSUPPORTED": "NPS-SERVER-UNSUPPORTED",
   "NWP-TASK-NOT-FOUND":               "NPS-CLIENT-NOT-FOUND",
   "NWP-TASK-ALREADY-CANCELLED":       "NPS-CLIENT-CONFLICT",
   "NWP-TASK-ALREADY-COMPLETED":       "NPS-CLIENT-CONFLICT",

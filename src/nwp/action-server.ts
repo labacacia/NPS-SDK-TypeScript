@@ -72,6 +72,8 @@ export interface ActionNodeOptions {
   rejectPrivateCallbackUrls?: boolean;
   /** Default token budget when X-NWP-Budget header is absent. 0 = unlimited. */
   defaultTokenBudget?: number;
+  /** Optional protocol profiles advertised in the NWM manifest. */
+  profiles?: Record<string, unknown>;
 }
 
 // ── Provider interface ──────────────────────────────────────────────────────────
@@ -107,6 +109,8 @@ export interface ActionContext {
  * {@link ActionNodeOptions.actions} MUST be handled.
  */
 export interface IActionNodeProvider {
+  /** Authorize before idempotency lookup so a cached replay cannot bypass policy. */
+  authorize?(frame: ActionFrame, context: ActionContext, signal?: AbortSignal): Promise<void> | void;
   execute(frame: ActionFrame, context: ActionContext, signal?: AbortSignal): Promise<ActionExecutionResult>;
 }
 
@@ -148,6 +152,7 @@ export class ActionNodeApp {
   private readonly clock: () => number;
   private readonly nwmJson: string;
   private readonly actionsJson: string;
+  private readonly backgroundControllers = new Map<string, AbortController>();
 
   constructor(provider: IActionNodeProvider, options: ActionNodeOptions, deps: ActionNodeAppDeps = {}) {
     if (options.actions[SYSTEM_TASK_STATUS] || options.actions[SYSTEM_TASK_CANCEL]) {
@@ -223,9 +228,15 @@ export class ActionNodeApp {
     const callbackUrl = (body["callback_url"] as string | null) ?? undefined;
     const requestId = (body["request_id"] as string | null) ?? null;
 
+    const agentNid = req.headers.get(H.HDR_AGENT);
+
     // Reserved actions handled by the server itself.
-    if (frame.actionId === SYSTEM_TASK_STATUS) return this.handleSystemTaskStatus(frame, requestId);
-    if (frame.actionId === SYSTEM_TASK_CANCEL) return this.handleSystemTaskCancel(frame, requestId);
+    if (frame.actionId === SYSTEM_TASK_STATUS) {
+      return this.handleSystemTaskStatus(frame, requestId, agentNid);
+    }
+    if (frame.actionId === SYSTEM_TASK_CANCEL) {
+      return this.handleSystemTaskCancel(frame, requestId, agentNid);
+    }
 
     const spec = this.opt.actions[frame.actionId];
     if (!spec) {
@@ -255,10 +266,26 @@ export class ActionNodeApp {
       }
     }
 
-    // Idempotency check (sync + async). §7.1
+    const effPriority = priority ?? "normal";
+    const admissionCtx: ActionContext = {
+      agentNid, requestId, taskId: null, spec, timeoutMs: effectiveTimeout, priority: effPriority,
+    };
+    try {
+      await this.provider.authorize?.(frame, admissionCtx, req.signal);
+    } catch (e) {
+      if (e instanceof ActionExecutionError) {
+        return this.errorResponse(e.httpStatus, e.npsStatus, e.errorCode, e.message);
+      }
+      return this.errorResponse(500, "NPS-SERVER-INTERNAL", ErrorCodes.NWP_NODE_UNAVAILABLE,
+        "action authorization failed.");
+    }
+
+    // Idempotency check (sync + async). §7.1. Node and principal scope are part
+    // of the key so one caller can never observe another caller's replay.
+    const cacheActionId = this.scopedCacheActionId(frame.actionId, agentNid);
     const paramsHash = hashParams(frame.params);
     if (frame.idempotencyKey) {
-      const cached = this.idempotency.get(frame.actionId, frame.idempotencyKey);
+      const cached = this.idempotency.get(cacheActionId, frame.idempotencyKey);
       if (cached) {
         if (cached.paramsHash !== paramsHash) {
           return this.errorResponse(409, "NPS-CLIENT-CONFLICT", ErrorCodes.NWP_ACTION_IDEMPOTENCY_CONFLICT,
@@ -272,15 +299,12 @@ export class ActionNodeApp {
       }
     }
 
-    const agentNid = req.headers.get(H.HDR_AGENT);
-    const effPriority = priority ?? "normal";
-
     if (frame.async_) {
       const taskId = randomUUID().replace(/-/g, "");
       this.taskStore.create(taskId, frame.actionId, requestId, agentNid);
 
       if (frame.idempotencyKey) {
-        this.idempotency.tryStore(frame.actionId, frame.idempotencyKey, {
+        this.idempotency.tryStore(cacheActionId, frame.idempotencyKey, {
           actionId: frame.actionId,
           paramsHash,
           taskId,
@@ -291,8 +315,10 @@ export class ActionNodeApp {
       const runCtx: ActionContext = {
         agentNid, requestId, taskId, spec, timeoutMs: effectiveTimeout, priority: effPriority,
       };
+      const controller = new AbortController();
+      this.backgroundControllers.set(taskId, controller);
       // Fire-and-forget; lifetime tied to the task, not the request.
-      void this.runAsyncTask(frame, runCtx, effectiveTimeout);
+      void this.runAsyncTask(frame, runCtx, effectiveTimeout, controller);
 
       return this.asyncResponse(taskId, "pending", requestId, spec.timeoutMsDefault);
     }
@@ -303,10 +329,9 @@ export class ActionNodeApp {
     };
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), effectiveTimeout);
     let result: ActionExecutionResult;
     try {
-      result = await this.provider.execute(frame, syncCtx, controller.signal);
+      result = await this.executeWithTimeout(frame, syncCtx, effectiveTimeout, controller);
     } catch (e) {
       if (e instanceof ActionExecutionError) {
         return this.errorResponse(e.httpStatus, e.npsStatus, e.errorCode, e.message);
@@ -317,12 +342,10 @@ export class ActionNodeApp {
       }
       return this.errorResponse(500, "NPS-SERVER-INTERNAL", ErrorCodes.NWP_NODE_UNAVAILABLE,
         "action execution failed.");
-    } finally {
-      clearTimeout(timer);
     }
 
     if (frame.idempotencyKey) {
-      this.idempotency.tryStore(frame.actionId, frame.idempotencyKey, {
+      this.idempotency.tryStore(cacheActionId, frame.idempotencyKey, {
         actionId: frame.actionId,
         paramsHash,
         result: result.result ?? null,
@@ -334,25 +357,37 @@ export class ActionNodeApp {
     return this.capsResponse(result.result ?? null, result.anchorRef ?? spec.resultAnchor, requestId, result.tokenEst ?? 0);
   }
 
-  private async runAsyncTask(frame: ActionFrame, ctx: ActionContext, timeoutMs: number): Promise<void> {
-    this.taskStore.tryTransition(ctx.taskId!, "pending", "running");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  private async runAsyncTask(
+    frame: ActionFrame,
+    ctx: ActionContext,
+    timeoutMs: number,
+    controller: AbortController,
+  ): Promise<void> {
+    if (!this.taskStore.tryTransition(ctx.taskId!, "pending", "running")) {
+      this.backgroundControllers.delete(ctx.taskId!);
+      return;
+    }
     try {
-      const res = await this.provider.execute(frame, ctx, controller.signal);
+      const res = await this.executeWithTimeout(frame, ctx, timeoutMs, controller);
       this.taskStore.complete(ctx.taskId!, res.result ?? null);
     } catch (e) {
+      if (this.taskStore.get(ctx.taskId!)?.status === "cancelled") return;
       const msg = controller.signal.aborted ? "task timed out"
         : (e instanceof Error ? e.message : String(e));
-      this.taskStore.fail(ctx.taskId!, { code: ErrorCodes.NWP_NODE_UNAVAILABLE, message: msg });
+      const code = e instanceof ActionExecutionError ? e.errorCode : ErrorCodes.NWP_NODE_UNAVAILABLE;
+      this.taskStore.fail(ctx.taskId!, { code, message: msg });
     } finally {
-      clearTimeout(timer);
+      this.backgroundControllers.delete(ctx.taskId!);
     }
   }
 
   // ── system.task.status / system.task.cancel ──────────────────────────────────
 
-  private handleSystemTaskStatus(frame: ActionFrame, requestId: string | null): Response {
+  private handleSystemTaskStatus(
+    frame: ActionFrame,
+    requestId: string | null,
+    agentNid: string | null,
+  ): Response {
     const taskId = readStringParam(frame.params, "task_id");
     if (!taskId) {
       return this.errorResponse(400, "NPS-CLIENT-BAD-REQUEST", ErrorCodes.NWP_ACTION_PARAMS_INVALID,
@@ -362,6 +397,10 @@ export class ActionNodeApp {
     if (!rec) {
       return this.errorResponse(404, "NPS-CLIENT-NOT-FOUND", ErrorCodes.NWP_TASK_NOT_FOUND,
         `Unknown task_id '${taskId}'.`);
+    }
+    if (rec.agentNid !== agentNid) {
+      return this.errorResponse(403, "NPS-AUTH-FORBIDDEN", ErrorCodes.NWP_AUTH_NID_SCOPE_VIOLATION,
+        "The caller does not own this task.");
     }
     const status: Record<string, unknown> = {
       task_id: rec.taskId,
@@ -376,7 +415,11 @@ export class ActionNodeApp {
     return this.capsResponse(status, undefined, requestId);
   }
 
-  private handleSystemTaskCancel(frame: ActionFrame, requestId: string | null): Response {
+  private handleSystemTaskCancel(
+    frame: ActionFrame,
+    requestId: string | null,
+    agentNid: string | null,
+  ): Response {
     const taskId = readStringParam(frame.params, "task_id");
     if (!taskId) {
       return this.errorResponse(400, "NPS-CLIENT-BAD-REQUEST", ErrorCodes.NWP_ACTION_PARAMS_INVALID,
@@ -387,11 +430,16 @@ export class ActionNodeApp {
       return this.errorResponse(404, "NPS-CLIENT-NOT-FOUND", ErrorCodes.NWP_TASK_NOT_FOUND,
         `Unknown task_id '${taskId}'.`);
     }
+    if (rec.agentNid !== agentNid) {
+      return this.errorResponse(403, "NPS-AUTH-FORBIDDEN", ErrorCodes.NWP_AUTH_NID_SCOPE_VIOLATION,
+        "The caller does not own this task.");
+    }
     if (rec.status === "completed" || rec.status === "failed" || rec.status === "cancelled") {
       return this.errorResponse(409, "NPS-CLIENT-CONFLICT", ErrorCodes.NWP_TASK_ALREADY_CANCELLED,
         `Task '${taskId}' is already in a terminal state ('${rec.status}').`);
     }
     this.taskStore.cancel(taskId);
+    this.backgroundControllers.get(taskId)?.abort();
     return this.capsResponse({ task_id: taskId, status: "cancelled" }, undefined, requestId);
   }
 
@@ -402,6 +450,41 @@ export class ActionNodeApp {
     const hardMax = Math.min(specMax, this.opt.maxTimeoutMs);
     if (requested <= 0) return spec.timeoutMsDefault ?? this.opt.defaultTimeoutMs;
     return requested > hardMax ? hardMax : requested;
+  }
+
+  private scopedCacheActionId(actionId: string, agentNid: string | null): string {
+    return `${this.opt.nodeId}\x1f${actionId}\x1f${agentNid ?? ""}`;
+  }
+
+  private async executeWithTimeout(
+    frame: ActionFrame,
+    context: ActionContext,
+    timeoutMs: number,
+    controller: AbortController,
+  ): Promise<ActionExecutionResult> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cancellation = new Promise<never>((_, reject) => {
+      controller.signal.addEventListener("abort", () => reject(new Error("action execution cancelled")), {
+        once: true,
+      });
+    });
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("action execution timed out"));
+      }, timeoutMs);
+    });
+    try {
+      const result = await Promise.race([
+        this.provider.execute(frame, context, controller.signal),
+        cancellation,
+        timeout,
+      ]);
+      if (controller.signal.aborted) throw new Error("action execution cancelled");
+      return result;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   private asyncResponse(taskId: string, status: string, requestId: string | null, estimatedMs?: number): Response {
@@ -478,6 +561,7 @@ export class ActionNodeApp {
       auth: { required: o.requireAuth, identity_type: o.requireAuth ? "nip-cert" : "none" },
       endpoints: { invoke: `${base}/invoke`, schema: `${base}/.schema` },
     };
+    if (o.profiles !== undefined) m["profiles"] = o.profiles;
     return m;
   }
 }

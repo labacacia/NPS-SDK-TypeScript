@@ -123,6 +123,7 @@ describe("ActionFrame", () => {
       true,
       "idem-key-1",
       5000,
+      "req-action-1",
     );
     const back = ActionFrame.fromDict(f.toDict());
     expect(back.actionId).toBe("search");
@@ -130,6 +131,7 @@ describe("ActionFrame", () => {
     expect(back.async_).toBe(true);
     expect(back.idempotencyKey).toBe("idem-key-1");
     expect(back.timeoutMs).toBe(5000);
+    expect(back.requestId).toBe("req-action-1");
   });
 
   it("defaults async to false when not provided", () => {

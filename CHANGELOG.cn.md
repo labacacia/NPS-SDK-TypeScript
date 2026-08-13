@@ -8,6 +8,36 @@
 
 ---
 
+## [1.0.0-alpha.18] —— 未发布
+
+### 新增
+
+- 新增官方有状态 LLM context DTO、进程内 store 与 Fetch Action Server coordinator，覆盖 owner 隔离、CAS reservation、生命周期 action、真异步执行、取消和 19 个共享一致性向量。
+
+### 变更
+
+- 跨 SDK 统一 unary request correlation、LLM usage 记账、严格有状态请求校验、任务所有权与晚到结果拒绝。
+- runtime `VERSION` 改为从 package metadata 派生，避免包版本与 API 版本漂移。
+
+## [1.0.0-alpha.17] —— 2026-08-02
+
+### 新增
+
+- 将参考服务端能力移植到 TypeScript SDK：NCP 原生传输、NWP action/complex/memory node 与双向 Bridge、NIP CA 服务及完整验证、NOP 编排、daemon 可观测性和 telemetry。
+- 通过 `./daemon` 包子路径导出 daemon 可观测性能力。
+- 实现共享的 NCP 0.11、NWP 0.20、NIP 0.13、NDP 0.12 与 NOP 0.9
+  可移植 Profile，并执行语言无关一致性 fixture。
+
+### 安全
+
+- 更新锁定的 Vitest/Vite/PostCSS/esbuild 工具链，清除 npm audit 报告的全部问题。
+
+## [1.0.0-alpha.16] —— 2026-07-23
+
+### 变更
+
+- 完成套件级 alpha.16 源码同步与协议兼容性更新。
+
 ## [1.0.0-alpha.15] —— 2026-06-28
 
 ### 变更

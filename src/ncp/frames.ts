@@ -139,6 +139,7 @@ export class CapsFrame implements NpsFrame {
     public readonly tokenEst?:      number,
     public readonly cached?:        boolean,
     public readonly tokenizerUsed?: string,
+    public readonly requestId?:     string,
   ) {}
 
   toDict(): Record<string, unknown> {
@@ -150,6 +151,7 @@ export class CapsFrame implements NpsFrame {
       token_est:       this.tokenEst      ?? null,
       cached:          this.cached        ?? null,
       tokenizer_used:  this.tokenizerUsed ?? null,
+      request_id:      this.requestId     ?? null,
     };
   }
 
@@ -162,6 +164,7 @@ export class CapsFrame implements NpsFrame {
       (data["token_est"]      as number | null) ?? undefined,
       (data["cached"]         as boolean | null) ?? undefined,
       (data["tokenizer_used"] as string | null) ?? undefined,
+      (data["request_id"]     as string | null) ?? undefined,
     );
   }
 }

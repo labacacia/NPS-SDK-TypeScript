@@ -2,19 +2,19 @@ English | [中文版](./README.cn.md)
 
 # @labacacia/nps-sdk — TypeScript / Node.js
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.16-orange.svg)](../../CHANGELOG.md)
-[![NCP](https://img.shields.io/badge/NCP-v0.9-5b8cff.svg)]()
-[![NWP](https://img.shields.io/badge/NWP-v0.14-4af0b0.svg)]()
-[![NIP](https://img.shields.io/badge/NIP-v0.10-7b61ff.svg)]()
-[![NDP](https://img.shields.io/badge/NDP-v0.9-f0a050.svg)]()
-[![NOP](https://img.shields.io/badge/NOP-v0.7-ff8c42.svg)]()
+[![Candidate](https://img.shields.io/badge/candidate-v1.0.0--alpha.17-blue.svg)](../../CHANGELOG.md)
+[![NCP](https://img.shields.io/badge/NCP-v0.11-5b8cff.svg)]()
+[![NWP](https://img.shields.io/badge/NWP-v0.20-4af0b0.svg)]()
+[![NIP](https://img.shields.io/badge/NIP-v0.13-7b61ff.svg)]()
+[![NDP](https://img.shields.io/badge/NDP-v0.12-f0a050.svg)]()
+[![NOP](https://img.shields.io/badge/NOP-v0.9-ff8c42.svg)]()
 
 TypeScript SDK for the **Neural Protocol Suite** (NPS) — a protocol suite designed for AI Agents.  
 Part of the [LabAcacia](https://github.com/LabAcacia) / INNO LOTUS PTY LTD open-source ecosystem.
 
 ## Status
 
-**v1.0.0-alpha.16 — RFC-0002 cross-SDK port (third language)** · 5 protocols · 271 tests · ≥ 98% coverage
+**v1.0.0-alpha.18 candidate — portable protocol conformance** · 5 protocols
 
 Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP serving helper (`NwpNativeNodeServer`), and TC-N1/TC-N2 conformance manifest helpers (`@labacacia/nps-sdk/conformance`).
 
@@ -32,19 +32,17 @@ Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP 
 - `nip.acme` — `AcmeClient` + in-process `AcmeServer` + JWS / message helpers (RFC 8555 + EdDSA per RFC 8037).
 - `IdentFrame` extended with non-breaking `assuranceLevel` / `certFormat` / `certChain` constructor options; v1 verifiers ignore the new fields.
 
-## Unreleased on `main`
+## Alpha.17 portable profiles
 
-The `main` branch additionally carries the **alpha.16-cycle server-surface parity wave**
-(not yet in any published package; ships with the next suite release):
+- NCP 0.11 bounded native-server handshake and deterministic Caps negotiation.
+- NWP 0.20 portable Node/Bridge serving and bridge lifecycle.
+- NIP 0.13 portable CA, live revocation, signed CRL, and verification policy.
+- NDP 0.12 signed Announce admission and registry conflict/liveness policy.
+- NOP 0.9 deterministic orchestration, callback security, delegation, leases,
+  and CR-0007 runtime decisions.
 
-- **NOP orchestration engine** — DAG validator, condition evaluator, input mapper,
-  result aggregator, task store, worker client, callback validator, instrumentation
-- **NCP native-mode transport** — server, session, client, frame IO, handshake caps,
-  encoding policy, patch format
-- **NIP CA service** — CA router + RA admission model, SQL-backed CA store,
-  TrustFrame validator, full six-step §7 `VerifyFull` verifier
-- **NWP server surface** extensions (memory/complex node serving)
-- **Daemon observability** (health / metrics / logging / shutdown) and **telemetry**
+All five profiles consume the language-neutral fixtures under
+[`spec/conformance`](../../spec/conformance/).
 
 ## Installation
 

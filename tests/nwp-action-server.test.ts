@@ -219,6 +219,40 @@ describe("action-server: idempotency", () => {
     expect(resp2.status).toBe(202);
     expect(r2.task_id).toBe(r1.task_id);
   });
+
+  it("scopes the same idempotency key to the authenticated caller", async () => {
+    let calls = 0;
+    const app = new ActionNodeApp(new EchoProvider(async (_frame, context) => ({
+      result: { call: ++calls, owner: context.agentNid },
+    })), baseOptions());
+    const body = { params: { x: 1 }, idempotency_key: "shared" };
+    const alice = await (await req(app, `${PREFIX}/invoke`, post("orders.create", body))).json();
+    const bob = await (await req(app, `${PREFIX}/invoke`, {
+      ...post("orders.create", body), agent: "urn:nps:agent:bob",
+    })).json();
+    expect(calls).toBe(2);
+    expect(alice.data[0].owner).toBe(AGENT);
+    expect(bob.data[0].owner).toBe("urn:nps:agent:bob");
+  });
+
+  it("reauthorizes before serving a cached replay", async () => {
+    let admissions = 0;
+    const provider: IActionNodeProvider = {
+      authorize: async () => {
+        if (++admissions > 1) {
+          throw new ActionExecutionError(401, "NPS-AUTH-UNAUTHENTICATED",
+            EC.NWP_AUTH_NID_REVOKED, "revoked");
+        }
+      },
+      execute: async () => ({ result: { ok: true } }),
+    };
+    const app = new ActionNodeApp(provider, baseOptions());
+    const body = { params: { x: 1 }, idempotency_key: "reauth" };
+    expect((await req(app, `${PREFIX}/invoke`, post("orders.create", body))).status).toBe(200);
+    const replay = await req(app, `${PREFIX}/invoke`, post("orders.create", body));
+    expect(replay.status).toBe(401);
+    expect((await replay.json()).error).toBe(EC.NWP_AUTH_NID_REVOKED);
+  });
 });
 
 describe("action-server: async + reserved system.task.*", () => {
@@ -273,6 +307,36 @@ describe("action-server: async + reserved system.task.*", () => {
     const again = await req(app, `${PREFIX}/invoke`, post(SYSTEM_TASK_CANCEL, { params: { task_id: taskId } }));
     expect(again.status).toBe(409);
     expect((await again.json()).error).toBe(EC.NWP_TASK_ALREADY_CANCELLED);
+  });
+
+  it("task status and cancellation are caller scoped", async () => {
+    const app = new ActionNodeApp(new EchoProvider(() => new Promise<ActionExecutionResult>(() => {})),
+      baseOptions());
+    const acc = await (await req(app, `${PREFIX}/invoke`, post("orders.build", { async: true }))).json();
+    const taskId = acc.task_id as string;
+    for (const action of [SYSTEM_TASK_STATUS, SYSTEM_TASK_CANCEL]) {
+      const response = await req(app, `${PREFIX}/invoke`, {
+        ...post(action, { params: { task_id: taskId } }), agent: "urn:nps:agent:bob",
+      });
+      expect(response.status).toBe(403);
+      expect((await response.json()).error).toBe(EC.NWP_AUTH_NID_SCOPE_VIOLATION);
+    }
+    await req(app, `${PREFIX}/invoke`, post(SYSTEM_TASK_CANCEL, { params: { task_id: taskId } }));
+  });
+
+  it("task.cancel aborts the provider signal", async () => {
+    let aborted = false;
+    const app = new ActionNodeApp(new EchoProvider(async (_frame, _context, signal) => {
+      await new Promise<void>((_resolve, reject) => signal?.addEventListener("abort", () => {
+        aborted = true;
+        reject(new Error("cancelled"));
+      }, { once: true }));
+      return { result: null };
+    }), baseOptions());
+    const acc = await (await req(app, `${PREFIX}/invoke`, post("orders.build", { async: true }))).json();
+    await req(app, `${PREFIX}/invoke`, post(SYSTEM_TASK_CANCEL, { params: { task_id: acc.task_id } }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(aborted).toBe(true);
   });
 });
 
