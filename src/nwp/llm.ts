@@ -224,6 +224,44 @@ export function llmCompleteResponseFromWire(data: Record<string, unknown>): LlmC
   }) as unknown as LlmCompleteActionResponse;
 }
 
+export function llmCompleteStreamChunkToWire(
+  chunk: LlmCompleteStreamChunkDto,
+): Record<string, unknown> {
+  return compact({
+    content_delta: chunk.contentDelta,
+    tool_calls: chunk.toolCalls?.map(toolCallToWire),
+    stop_reason: chunk.stopReason,
+    error: chunk.error,
+    usage: chunk.usage == null ? undefined : usageToWire(chunk.usage),
+    context: chunk.context == null ? undefined : receiptToWire(chunk.context),
+  });
+}
+
+export function llmCompleteStreamChunkFromWire(
+  data: Record<string, unknown>,
+): LlmCompleteStreamChunkDto {
+  const stopReason = data["stop_reason"];
+  if (stopReason !== undefined && !isStopReason(stopReason)) {
+    throw new TypeError("stop_reason is invalid");
+  }
+  const toolCalls = data["tool_calls"];
+  if (toolCalls !== undefined && !Array.isArray(toolCalls)) {
+    throw new TypeError("tool_calls must be an array");
+  }
+  const usage = data["usage"];
+  const context = data["context"];
+  return compact({
+    contentDelta: optionalString(data["content_delta"], "content_delta"),
+    toolCalls: toolCalls?.map(value => toolCallFromWire(requireObject(value, "tool_call"))),
+    stopReason,
+    error: optionalString(data["error"], "error"),
+    usage: usage === undefined ? undefined : usageFromWire(requireObject(usage, "usage")),
+    context: context === undefined
+      ? undefined
+      : llmContextReceiptFromWire(requireObject(context, "context")),
+  }) as unknown as LlmCompleteStreamChunkDto;
+}
+
 export function llmContextReceiptToWire(value: LlmContextReceiptDto): Record<string, unknown> {
   return receiptToWire(value);
 }

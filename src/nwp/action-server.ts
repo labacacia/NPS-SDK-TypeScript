@@ -15,6 +15,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
+import { StreamFrame } from "../ncp/frames.js";
 import { ActionFrame } from "./frames.js";
 import * as ErrorCodes from "./nwp-error-codes.js";
 import * as H from "./http-headers.js";
@@ -82,6 +83,8 @@ export interface ActionNodeOptions {
 export interface ActionExecutionResult {
   /** Action output; serialised into CapsFrame.data (single element). null → empty data. */
   result?: unknown;
+  /** Streaming output. The Action Server emits NDJSON under a fresh stream id. */
+  streamFrames?: AsyncIterable<StreamFrame>;
   /** Optional anchor_id for the response schema; overrides ActionSpec.resultAnchor. */
   anchorRef?: string;
   /** Approximate token count of the serialised result. 0 when unknown. */
@@ -102,6 +105,8 @@ export interface ActionContext {
   timeoutMs: number;
   /** Priority hint, or "normal". */
   priority: string;
+  /** Exact serialized ActionFrame bytes accepted at the decoder boundary. */
+  wireInputBytes: number;
 }
 
 /**
@@ -218,8 +223,11 @@ export class ActionNodeApp {
 
   private async handleInvoke(req: Request): Promise<Response> {
     let body: Record<string, unknown>;
+    let wireInputBytes: number;
     try {
-      body = (await req.json()) as Record<string, unknown>;
+      const rawBody = await req.text();
+      wireInputBytes = new TextEncoder().encode(rawBody).byteLength;
+      body = JSON.parse(rawBody) as Record<string, unknown>;
     } catch (e) {
       return this.errorResponse(400, "NPS-CLIENT-BAD-REQUEST", ErrorCodes.NWP_ACTION_PARAMS_INVALID, String(e));
     }
@@ -269,6 +277,7 @@ export class ActionNodeApp {
     const effPriority = priority ?? "normal";
     const admissionCtx: ActionContext = {
       agentNid, requestId, taskId: null, spec, timeoutMs: effectiveTimeout, priority: effPriority,
+      wireInputBytes,
     };
     try {
       await this.provider.authorize?.(frame, admissionCtx, req.signal);
@@ -295,6 +304,9 @@ export class ActionNodeApp {
           const status = this.taskStore.get(cached.taskId)?.status ?? "pending";
           return this.asyncResponse(cached.taskId, status, requestId, undefined);
         }
+        if (cached.streamFrames) {
+          return this.streamResponse(asAsyncFrames(cached.streamFrames), requestId, req.signal);
+        }
         return this.capsResponse(cached.result ?? null, cached.anchorRef, requestId);
       }
     }
@@ -314,6 +326,7 @@ export class ActionNodeApp {
 
       const runCtx: ActionContext = {
         agentNid, requestId, taskId, spec, timeoutMs: effectiveTimeout, priority: effPriority,
+        wireInputBytes,
       };
       const controller = new AbortController();
       this.backgroundControllers.set(taskId, controller);
@@ -326,6 +339,7 @@ export class ActionNodeApp {
     // Synchronous path.
     const syncCtx: ActionContext = {
       agentNid, requestId, taskId: null, spec, timeoutMs: effectiveTimeout, priority: effPriority,
+      wireInputBytes,
     };
 
     const controller = new AbortController();
@@ -342,6 +356,26 @@ export class ActionNodeApp {
       }
       return this.errorResponse(500, "NPS-SERVER-INTERNAL", ErrorCodes.NWP_NODE_UNAVAILABLE,
         "action execution failed.");
+    }
+
+    if (result.streamFrames) {
+      return this.streamResponse(
+        result.streamFrames,
+        requestId,
+        controller.signal,
+        effectiveTimeout,
+        completed => {
+          if (!frame.idempotencyKey) return;
+          this.idempotency.tryStore(cacheActionId, frame.idempotencyKey, {
+            actionId: frame.actionId,
+            paramsHash,
+            streamFrames: completed,
+            anchorRef: result.anchorRef ?? spec.resultAnchor,
+            expiresAt: this.clock() + this.opt.idempotencyTtlMs,
+          });
+        },
+        controller,
+      );
     }
 
     if (frame.idempotencyKey) {
@@ -519,6 +553,91 @@ export class ActionNodeApp {
     return new Response(JSON.stringify(caps), { status: 200, headers });
   }
 
+  private streamResponse(
+    source: AsyncIterable<StreamFrame>,
+    requestId: string | null,
+    signal: AbortSignal,
+    timeoutMs?: number,
+    onComplete?: (frames: readonly StreamFrame[]) => void,
+    abortController?: AbortController,
+  ): Response {
+    const streamId = randomUUID().replace(/-/g, "");
+    const encoder = new TextEncoder();
+    let iterator: AsyncIterator<StreamFrame> | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start: async controller => {
+        const emitted: StreamFrame[] = [];
+        let nextSeq = 0;
+        let terminal = false;
+        iterator = source[Symbol.asyncIterator]();
+        if (timeoutMs !== undefined) {
+          timeout = setTimeout(() => {
+            abortController?.abort();
+            void iterator?.return?.();
+          }, timeoutMs);
+        }
+        try {
+          while (true) {
+            if (signal.aborted) throw new Error("action stream cancelled");
+            const item = await iterator.next();
+            if (item.done) break;
+            const supplied = item.value;
+            if (terminal) throw internalStreamError("action stream emitted frames after terminal");
+            if (supplied.seq !== nextSeq) {
+              throw internalStreamError(`action stream sequence expected ${nextSeq}, got ${supplied.seq}`);
+            }
+            if (supplied.errorCode !== undefined && !supplied.isLast) {
+              throw internalStreamError("action stream error_code is terminal-only");
+            }
+            const frame = new StreamFrame(
+              streamId,
+              supplied.seq,
+              supplied.isLast,
+              supplied.data,
+              supplied.anchorRef,
+              supplied.windowSize,
+              supplied.errorCode,
+            );
+            emitted.push(frame);
+            controller.enqueue(encoder.encode(`${JSON.stringify(frame.toDict())}\n`));
+            nextSeq++;
+            terminal = frame.isLast;
+          }
+          if (!terminal) throw internalStreamError("action stream ended without a terminal frame");
+          if (emitted.at(-1)?.errorCode === undefined) onComplete?.(emitted);
+        } catch (error) {
+          if (!terminal && !signal.aborted) {
+            const code = error instanceof ActionExecutionError
+              ? error.errorCode : ErrorCodes.NWP_NODE_UNAVAILABLE;
+            const failure = new StreamFrame(
+              streamId, nextSeq, true, [], undefined, undefined, code);
+            controller.enqueue(encoder.encode(`${JSON.stringify(failure.toDict())}\n`));
+          }
+        } finally {
+          if (timeout !== undefined) clearTimeout(timeout);
+          try {
+            await iterator?.return?.();
+          } catch {
+            // The protocol error already terminates the outward stream.
+          }
+          controller.close();
+        }
+      },
+      cancel: async () => {
+        if (timeout !== undefined) clearTimeout(timeout);
+        abortController?.abort();
+        await iterator?.return?.();
+      },
+    });
+    const headers: Record<string, string> = {
+      "content-type": "application/x-ndjson",
+      [H.HDR_NODE_TYPE.toLowerCase()]: "action",
+    };
+    if (requestId !== null) headers[H.HDR_REQUEST_ID.toLowerCase()] = requestId;
+    return new Response(body, { status: 200, headers });
+  }
+
   private notFound(): Response {
     // Match .NET: an unmatched sub-path falls through to `next` (404 with no body).
     return new Response(null, { status: 404 });
@@ -557,7 +676,11 @@ export class ActionNodeApp {
       display_name: o.displayName ?? null,
       wire_formats: ["ncp-capsule", "json"],
       preferred_format: "json",
-      capabilities: { query: false, stream: false, token_budget_hint: true },
+      capabilities: {
+        query: false,
+        stream: (this.opt.profiles?.["llm"] as Record<string, unknown> | undefined)?.["supports_stream"] === true,
+        token_budget_hint: true,
+      },
       auth: { required: o.requireAuth, identity_type: o.requireAuth ? "nip-cert" : "none" },
       endpoints: { invoke: `${base}/invoke`, schema: `${base}/.schema` },
     };
@@ -577,6 +700,15 @@ function readStringParam(params: Record<string, unknown> | undefined, name: stri
   if (!params || typeof params !== "object") return null;
   const v = (params as Record<string, unknown>)[name];
   return typeof v === "string" ? v : null;
+}
+
+function internalStreamError(message: string): ActionExecutionError {
+  return new ActionExecutionError(
+    500, "NPS-SERVER-INTERNAL", ErrorCodes.NWP_NODE_UNAVAILABLE, message);
+}
+
+async function* asAsyncFrames(frames: readonly StreamFrame[]): AsyncGenerator<StreamFrame> {
+  yield* frames;
 }
 
 // Re-export store types for convenience.

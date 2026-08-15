@@ -123,7 +123,11 @@ function capture(action: () => unknown): LlmContextStoreError {
   throw new Error("Expected LlmContextStoreError");
 }
 
-interface SharedVector { id: string }
+interface SharedVector {
+  id: string;
+  input: Record<string, any>;
+  expected: Record<string, any>;
+}
 const fixture = JSON.parse(readFileSync(
   conformanceFixture("nwp", "llm_context_vectors.json"),
   "utf8",
@@ -155,6 +159,7 @@ describe("NWP stateful LLM context shared vectors", () => {
   for (const vector of fixture.vectors) {
     it(vector.id, () => {
       expect(cases[vector.id]).toBeDefined();
+      assertFixtureContract(vector);
       cases[vector.id]!();
     });
   }
@@ -193,6 +198,77 @@ describe("NWP stateful LLM context shared vectors", () => {
     expect(h.store.snapshot(ALICE, receipt.contextId).transcript[1]?.content).toBe("Original");
   });
 });
+
+function assertFixtureContract(vector: SharedVector): void {
+  const i = vector.input;
+  const e = vector.expected;
+  expect(Object.keys(i).length, `${vector.id} input`).toBeGreaterThan(0);
+  expect(Object.keys(e).length, `${vector.id} expected`).toBeGreaterThan(0);
+  switch (vector.id.slice(-3)) {
+    case "001":
+      expect(i.params.context).toBeUndefined();
+      expect(e).toEqual({ mode: "stateless", dispatched: true, context_mutated: false,
+        response_context_present: false });
+      break;
+    case "002":
+      expect(e.owner_nid).toBe(i.owner_nid); expect(e).toMatchObject({ version: 1, committed: true }); break;
+    case "003":
+      expect(e.version).toBe(i.pre_state.version + 1);
+      expect(e.accepted_delta_message_count).toBe(i.params.messages.length);
+      expect(e.post_message_count).toBe(i.pre_state.messages.length + i.params.messages.length + 1); break;
+    case "004":
+      expect(e.post_version).toBe(i.pre_state.version); expect(e.hint.current_version).toBe(i.pre_state.version);
+      expect(e.error).toBe(NWP_LLM_CONTEXT_VERSION_CONFLICT); break;
+    case "005":
+      expect(e.parent_version).toBe(i.request.base_version); expect(e.post_parent_version).toBe(i.parent_version_at_child_commit);
+      expect(e.version).toBe(1); break;
+    case "006":
+      expect(e.version).toBe(i.pre_state.version + 1); expect(e.resolved_model).toBe(i.request.model); break;
+    case "007":
+      expect(e.post_version).toBe(i.pre_state.version); expect(e.error).toBe(NWP_LLM_CONTEXT_BINDING_MISMATCH);
+      expect(e.provider_dispatched || e.stateless_fallback).toBe(false); break;
+    case "008":
+      expect(i.owner_nid).not.toBe(i.caller_nid); expect(i.caller_capabilities).not.toContain("llm:context");
+      expect(e.error).toBe(NWP_LLM_CONTEXT_FORBIDDEN); break;
+    case "009":
+      expect(e.post_version).toBe(i.pre_state.version); expect(e.committed).toBe(false);
+      expect(e.reservation_released).toBe(true); break;
+    case "010":
+      expect(e.running_status.context_id_present).toBe(false);
+      expect(e.completed_status.context_id).toBe(i.status_sequence.at(-1).context_id);
+      expect(e.completed_status.version).toBe(i.status_sequence.at(-1).version); break;
+    case "011":
+      expect(e.release_receipt.version).toBe(i.pre_state.version + 1);
+      expect(e.expiry_tombstone.version).toBe(i.expiry_branch.active_version); break;
+    case "012":
+      expect(i.usage.input_tokens).toBe(i.usage.reused_tokens + i.usage.evaluated_tokens);
+      expect(i.usage.wire_input_bytes).toBeLessThan(i.stateless_wire_input_bytes);
+      expect(e).toMatchObject({ usage_equation_valid: true, wire_input_smaller_than_stateless: true }); break;
+    case "013":
+      expect(i.manifest.context.operations).toEqual(i.implemented_operations);
+      expect(i.manifest.context.persistence).toBe(i.implemented_persistence);
+      expect(e).toMatchObject({ manifest_valid: true, requires_capability: "llm:context" }); break;
+    case "014":
+      expect(i).toMatchObject({ persistence: "process", event: "process_restart" });
+      expect(e.error).toBe(NWP_LLM_CONTEXT_NOT_FOUND); expect(e.replacement_created || e.stateless_fallback).toBe(false); break;
+    case "015":
+      expect(i.original.chunks.join("")).toBe(e.ordered_content); expect(i.original.stream_id).not.toBe(i.replay_stream_id);
+      expect(e.provider_invocations + e.additional_context_commits).toBe(0); break;
+    case "016":
+      expect(i).toMatchObject({ authorization_at_admission: "valid", authorization_at_commit: "revoked" });
+      expect(e.post_version).toBe(i.pre_state.version); expect(e.error).toBe(NWP_AUTH_NID_REVOKED); break;
+    case "017":
+      expect(i.live_contexts).toBe(i.max_contexts_per_principal); expect(e.error).toBe(NWP_LLM_CONTEXT_LIMIT_EXCEEDED);
+      expect(e.context_allocated).toBe(false); break;
+    case "018":
+      expect(i.advertised_operations).not.toContain(i.request.operation);
+      expect(e.error).toBe(NWP_LLM_CONTEXT_OPERATION_UNSUPPORTED); break;
+    case "019":
+      expect(i.idempotency_key_present).toBe(false); expect(e.error).toBe(NWP_ACTION_PARAMS_INVALID);
+      expect(e.context_allocated || e.provider_dispatched).toBe(false); break;
+    default: throw new Error(`Unimplemented fixture contract: ${vector.id}`);
+  }
+}
 
 function statelessCompatibility(): void {
   const request = { model: "willow-small", messages: [user("Hello")] };

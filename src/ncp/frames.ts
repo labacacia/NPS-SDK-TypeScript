@@ -100,6 +100,7 @@ export class StreamFrame implements NpsFrame {
     public readonly data:       readonly Record<string, unknown>[],
     public readonly anchorRef?: string,
     public readonly windowSize?: number,
+    public readonly errorCode?: string,
   ) {}
 
   toDict(): Record<string, unknown> {
@@ -110,6 +111,7 @@ export class StreamFrame implements NpsFrame {
       data:        this.data,
       anchor_ref:  this.anchorRef  ?? null,
       window_size: this.windowSize ?? null,
+      error_code:  this.errorCode  ?? null,
     };
   }
 
@@ -121,6 +123,7 @@ export class StreamFrame implements NpsFrame {
       data["data"]        as Record<string, unknown>[],
       (data["anchor_ref"]  as string | null)  ?? undefined,
       (data["window_size"] as number | null)  ?? undefined,
+      (data["error_code"]  as string | null)  ?? undefined,
     );
   }
 }

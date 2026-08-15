@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
+import { StreamFrame } from "../src/ncp/frames.js";
 import {
   ActionExecutionError,
   ActionNodeApp,
   SYSTEM_TASK_CANCEL,
   SYSTEM_TASK_STATUS,
   type ActionExecutionResult,
+  type ActionContext,
   type ActionNodeOptions,
   type IActionNodeProvider,
 } from "../src/nwp/action-server.js";
@@ -32,21 +34,22 @@ const BOB = "urn:nps:agent:labacacia:bob";
 class LlmProvider implements IActionNodeProvider {
   calls = 0;
   constructor(
-    private readonly behavior: (
+    private readonly behavior?: (
       frame: ActionFrame,
       signal?: AbortSignal,
-    ) => Promise<ActionExecutionResult> = async () => ({
+    ) => Promise<ActionExecutionResult>,
+  ) {}
+
+  async execute(frame: ActionFrame, context: ActionContext, signal?: AbortSignal): Promise<ActionExecutionResult> {
+    this.calls++;
+    if (this.behavior) return this.behavior(frame, signal);
+    return {
       result: {
         stop_reason: "end_turn",
         content: "First",
-        usage: { input_tokens: 12, output_tokens: 2, wire_input_bytes: 128 },
+        usage: { input_tokens: 12, output_tokens: 2, wire_input_bytes: context.wireInputBytes },
       },
-    }),
-  ) {}
-
-  async execute(frame: ActionFrame, _context: unknown, signal?: AbortSignal): Promise<ActionExecutionResult> {
-    this.calls++;
-    return this.behavior(frame, signal);
+    };
   }
 }
 
@@ -54,10 +57,12 @@ function createTest(
   provider = new LlmProvider(),
   configure?: (options: {
     supportsTools: boolean;
+    supportsStream: boolean;
     authorizer?: (
       owner: { nid: string; securityScope: string },
       actionId: string,
       stage: LlmAuthorizationStage,
+      requiredCapabilities: readonly string[],
     ) => Promise<void> | void;
   }) => void,
 ) {
@@ -70,7 +75,13 @@ function createTest(
   const store = new InMemoryLlmContextStore({
     contextIdFactory: () => ids.shift() ?? "QUJDREVGR0hJSktMTU5PUA",
   });
-  const llmOptions = { securityScope: "workspace-a", runtimeRevision: "runtime-1", supportsTools: false };
+  const llmOptions = {
+    securityScope: "workspace-a",
+    runtimeRevision: "runtime-1",
+    supportsTools: false,
+    supportsStream: true,
+    authorizer: async () => {},
+  };
   configure?.(llmOptions);
   const coordinator = new StatefulLlmActionProvider(provider, store, llmOptions);
   const node: ActionNodeOptions = {
@@ -119,6 +130,25 @@ async function data(response: Response): Promise<Record<string, unknown>> {
   return body.data[0]!;
 }
 
+async function streamFrames(response: Response): Promise<Record<string, unknown>[]> {
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("application/x-ndjson");
+  return (await response.text()).split("\n").filter(Boolean).map(
+    line => JSON.parse(line) as Record<string, unknown>);
+}
+
+async function* completionStream(abnormal = false): AsyncGenerator<StreamFrame> {
+  yield new StreamFrame("provider", 0, false, [{ content_delta: "Fir" }],
+    "nps:system:llm.complete:stream");
+  await Promise.resolve();
+  if (abnormal) return;
+  yield new StreamFrame("provider", 1, true, [{
+    content_delta: "st",
+    stop_reason: "end_turn",
+    usage: { input_tokens: 2, output_tokens: 1 },
+  }]);
+}
+
 describe("stateful LLM Action Server", () => {
   it("advertises the exact process-local NWM 0.2 profile and actions", async () => {
     const { app } = createTest();
@@ -128,7 +158,7 @@ describe("stateful LLM Action Server", () => {
     expect(manifest.profiles.llm).toMatchObject({
       profile_version: "0.2",
       actions: [LLM_COMPLETE, LLM_CONTEXT_STATUS, LLM_CONTEXT_RELEASE],
-      supports_stream: false,
+      supports_stream: true,
       context: {
         supported: true,
         operations: ["create", "append", "fork", "reset", "release"],
@@ -170,6 +200,53 @@ describe("stateful LLM Action Server", () => {
     expect(released).toMatchObject({ state: "released", version: 3 });
   });
 
+  it("recovers after reconnect, serializes concurrent appends, and loses process state on restart", async () => {
+    let markStarted!: () => void;
+    let releaseWinner!: () => void;
+    const started = new Promise<void>(resolve => { markStarted = resolve; });
+    const gate = new Promise<void>(resolve => { releaseWinner = resolve; });
+    const provider = new LlmProvider(async frame => {
+      const context = (frame.params as Record<string, unknown>).context as Record<string, unknown>;
+      if (context.operation === "append") {
+        markStarted();
+        await gate;
+      }
+      return { result: { stop_reason: "end_turn", content: "First" } };
+    });
+    const test = createTest(provider);
+
+    // Discard the create body and recover it through a logically new connection.
+    expect((await invoke(test.app, LLM_COMPLETE, createParams(), { key: "lost-create" })).status)
+      .toBe(200);
+    const recovered = await data(await invoke(
+      test.app, LLM_CONTEXT_STATUS, { idempotency_key: "lost-create" }));
+    expect(recovered).toMatchObject({ state: "active", version: 1 });
+    const contextId = recovered.context_id as string;
+    const append = {
+      kind: LLM_COMPLETE,
+      model: "willow-small",
+      messages: [{ role: "user", content: "Two" }],
+      context: { operation: "append", context_id: contextId, base_version: 1 },
+    };
+    const winnerPromise = invoke(test.app, LLM_COMPLETE, append, { key: "append-winner" });
+    await started;
+    const loser = await invoke(test.app, LLM_COMPLETE, append, { key: "append-loser" });
+    expect(loser.status).toBe(409);
+    expect((await loser.json()).error).toBe(EC.NWP_LLM_CONTEXT_VERSION_CONFLICT);
+    releaseWinner();
+    const winner = await data(await winnerPromise);
+    expect((winner.context as Record<string, unknown>).version).toBe(2);
+    expect(provider.calls).toBe(2);
+
+    const restarted = createTest();
+    append.context.base_version = 2;
+    const missing = await invoke(
+      restarted.app, LLM_COMPLETE, append, { key: "append-after-restart" });
+    expect(missing.status).toBe(404);
+    expect((await missing.json()).error).toBe(EC.NWP_LLM_CONTEXT_NOT_FOUND);
+    expect(restarted.provider.calls).toBe(0);
+  });
+
   it("rejects malformed requests and unsupported tools before provider execution", async () => {
     const test = createTest();
     const malformed = await invoke(test.app, LLM_COMPLETE, {
@@ -184,6 +261,10 @@ describe("stateful LLM Action Server", () => {
       ...createParams(), context: { operation: "reset" },
     }, { key: "reset-without-version" });
     expect(resetWithoutVersion.status).toBe(422);
+    const streamAsync = await invoke(test.app, LLM_COMPLETE, {
+      ...createParams(), stream: true,
+    }, { key: "stream-async", async: true });
+    expect(streamAsync.status).toBe(422);
     expect(test.provider.calls).toBe(0);
   });
 
@@ -201,6 +282,50 @@ describe("stateful LLM Action Server", () => {
     }
   });
 
+  it("commits a stream at terminal and replays it under a fresh stream id", async () => {
+    const provider = new LlmProvider(async frame => frame.params?.["stream"] === true
+      ? { streamFrames: completionStream() }
+      : { result: { stop_reason: "end_turn", content: "First" } });
+    const test = createTest(provider);
+    const params = { ...createParams(), stream: true };
+    const first = await streamFrames(await invoke(
+      test.app, LLM_COMPLETE, params, { key: "stream-create" }));
+    const replay = await streamFrames(await invoke(
+      test.app, LLM_COMPLETE, params, { key: "stream-create" }));
+
+    expect(first.map(frame => frame.is_last)).toEqual([false, true]);
+    expect(first[0]!.stream_id).not.toBe(replay[0]!.stream_id);
+    const firstChunk = (first[0]!.data as Record<string, unknown>[])[0]!;
+    const terminal = (first[1]!.data as Record<string, unknown>[])[0]!;
+    const replayTerminal = (replay[1]!.data as Record<string, unknown>[])[0]!;
+    expect(firstChunk).toMatchObject({ content_delta: "Fir" });
+    expect(firstChunk.context).toBeUndefined();
+    expect(terminal).toMatchObject({ content_delta: "st", stop_reason: "end_turn" });
+    expect(terminal.context).toEqual(replayTerminal.context);
+    expect((terminal.context as Record<string, unknown>).version).toBe(1);
+    expect(provider.calls).toBe(1);
+    const contextId = (terminal.context as Record<string, unknown>).context_id as string;
+    expect(test.store.snapshot(
+      { nid: ALICE, securityScope: "workspace-a" }, contextId).transcript.at(-1)?.content)
+      .toBe("First");
+  });
+
+  it("aborts a stream that ends without a terminal frame", async () => {
+    const provider = new LlmProvider(async () => ({
+      streamFrames: completionStream(true),
+    }));
+    const test = createTest(provider);
+    const frames = await streamFrames(await invoke(test.app, LLM_COMPLETE, {
+      ...createParams(), stream: true,
+    }, { key: "stream-abnormal" }));
+    expect(frames).toHaveLength(2);
+    expect(frames[1]).toMatchObject({ is_last: true, error_code: EC.NWP_NODE_UNAVAILABLE });
+    const status = await data(await invoke(
+      test.app, LLM_CONTEXT_STATUS, { idempotency_key: "stream-abnormal" }));
+    expect(status).toMatchObject({ state: "failed" });
+    expect(status.context_id).toBeUndefined();
+  });
+
   it("reauthorizes at commit and aborts a revoked mutation", async () => {
     const test = createTest(new LlmProvider(), options => {
       options.authorizer = async (_owner, _action, stage) => {
@@ -215,6 +340,36 @@ describe("stateful LLM Action Server", () => {
     expect((await response.json()).error).toBe(EC.NWP_AUTH_NID_REVOKED);
     const status = await data(await invoke(test.app, LLM_CONTEXT_STATUS, { idempotency_key: "revoked" }));
     expect(status).toMatchObject({ state: "failed", error_code: EC.NWP_AUTH_NID_REVOKED });
+  });
+
+  it("passes exact capability sets and fails closed without an authorizer", async () => {
+    const checks: string[][] = [];
+    const test = createTest(new LlmProvider(), options => {
+      options.authorizer = async (_owner, _action, _stage, required) => {
+        checks.push([...required]);
+      };
+    });
+
+    expect((await invoke(test.app, LLM_COMPLETE, createParams(), { key: "capabilities" })).status)
+      .toBe(200);
+    expect((await invoke(test.app, LLM_CONTEXT_STATUS, { idempotency_key: "capabilities" })).status)
+      .toBe(200);
+    expect((await invoke(test.app, LLM_COMPLETE, {
+      ...createParams(), stream: true, tools: [{ name: "lookup" }],
+    }, { key: "extended-capabilities" })).status).toBe(422);
+    expect(checks).toEqual([
+      ["llm:complete", "llm:context"],
+      ["llm:complete", "llm:context"],
+      ["llm:context"],
+      ["llm:complete", "llm:context", "llm:stream", "llm:tool_call"],
+    ]);
+
+    const deniedTest = createTest(new LlmProvider(), options => { delete options.authorizer; });
+    const denied = await invoke(
+      deniedTest.app, LLM_COMPLETE, createParams(), { key: "no-authorizer" });
+    expect(denied.status).toBe(403);
+    expect((await denied.json() as Record<string, unknown>).error).toBe(EC.NWP_LLM_CONTEXT_FORBIDDEN);
+    expect(deniedTest.provider.calls).toBe(0);
   });
 
   it("keeps response idempotency and task access caller scoped", async () => {

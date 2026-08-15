@@ -119,6 +119,7 @@ export interface IdempotentEntry {
   actionId: string;
   paramsHash: string;
   result?: unknown;
+  streamFrames?: readonly import("../ncp/frames.js").StreamFrame[];
   anchorRef?: string;
   /** Present for async actions — repeated calls get the same task handle. */
   taskId?: string;

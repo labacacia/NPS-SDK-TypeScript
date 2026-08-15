@@ -321,8 +321,11 @@ export class ComplexNodeApp {
 
   private async handleInvoke(req: Request): Promise<Response> {
     let body: Record<string, unknown>;
+    let wireInputBytes: number;
     try {
-      body = (await req.json()) as Record<string, unknown>;
+      const rawBody = await req.text();
+      wireInputBytes = new TextEncoder().encode(rawBody).byteLength;
+      body = JSON.parse(rawBody) as Record<string, unknown>;
     } catch (e) {
       return this.errorResponse(400, "NPS-CLIENT-BAD-REQUEST", ErrorCodes.NWP_ACTION_PARAMS_INVALID, String(e));
     }
@@ -355,6 +358,7 @@ export class ComplexNodeApp {
     try {
       result = await this.provider.execute(frame, {
         agentNid, requestId, taskId: null, spec, timeoutMs, priority: priority ?? "normal",
+        wireInputBytes,
       }, controller.signal);
     } catch (e) {
       if (e instanceof ActionExecutionError) {

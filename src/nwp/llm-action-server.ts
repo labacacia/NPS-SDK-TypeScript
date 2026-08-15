@@ -4,6 +4,7 @@
 /** Action Server coordinator for the NWP 0.21 stateful LLM context contract. */
 
 import { NpsStatusCodes, toHttpStatus, type NpsStatusCode } from "../core/status-codes.js";
+import { StreamFrame } from "../ncp/frames.js";
 import {
   ActionExecutionError,
   type ActionContext,
@@ -22,8 +23,11 @@ import type { ActionFrame } from "./frames.js";
 import {
   CAPABILITY_LLM_COMPLETE,
   CAPABILITY_LLM_CONTEXT,
+  CAPABILITY_LLM_STREAM,
+  CAPABILITY_LLM_TOOL_CALL,
   LLM_COMPLETE,
   LLM_COMPLETE_RESPONSE_ANCHOR,
+  LLM_COMPLETE_STREAM_ANCHOR,
   LLM_CONTEXT_RELEASE,
   LLM_CONTEXT_RELEASE_RESPONSE_ANCHOR,
   LLM_CONTEXT_STATUS,
@@ -31,9 +35,12 @@ import {
   llmCompleteRequestFromWire,
   llmCompleteResponseFromWire,
   llmCompleteResponseToWire,
+  llmCompleteStreamChunkFromWire,
+  llmCompleteStreamChunkToWire,
   llmContextReceiptToWire,
   llmContextStatusToWire,
   type LlmCompleteActionRequest,
+  type LlmCompleteStreamChunkDto,
   type LlmContextOperation,
   type LlmMessageDto,
 } from "./llm.js";
@@ -49,6 +56,7 @@ export type LlmContextAuthorizer = (
   owner: LlmContextOwner,
   actionId: string,
   stage: LlmAuthorizationStage,
+  requiredCapabilities: readonly string[],
   context: ActionContext,
   signal?: AbortSignal,
 ) => Promise<void> | void;
@@ -61,8 +69,10 @@ export interface StatefulLlmActionOptions {
   providerName?: string;
   defaultModel?: string;
   supportsTools?: boolean;
+  supportsStream?: boolean;
   supportsJsonMode?: boolean;
   reasoningVisibility?: string;
+  /** Verifies every supplied capability; stateful requests fail closed when absent. */
   authorizer?: LlmContextAuthorizer;
 }
 
@@ -70,7 +80,7 @@ export interface StatefulLlmActionOptions {
 export class StatefulLlmActionProvider implements IActionNodeProvider {
   readonly store: InMemoryLlmContextStore;
   private readonly options: Required<Pick<StatefulLlmActionOptions,
-    "supportsTools" | "supportsJsonMode">> & StatefulLlmActionOptions;
+    "supportsTools" | "supportsStream" | "supportsJsonMode">> & StatefulLlmActionOptions;
 
   constructor(
     private readonly inner: IActionNodeProvider,
@@ -80,7 +90,7 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
     if (!options.securityScope.trim()) throw new Error("securityScope must not be empty");
     if (!options.runtimeRevision.trim()) throw new Error("runtimeRevision must not be empty");
     this.store = store;
-    this.options = { supportsTools: false, supportsJsonMode: false, ...options };
+    this.options = { supportsTools: false, supportsStream: false, supportsJsonMode: false, ...options };
   }
 
   /** Registers the exact actions and process-persistence profile implemented here. */
@@ -114,7 +124,7 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
     const profile: Record<string, unknown> = {
       profile_version: "0.2",
       actions: [LLM_COMPLETE, LLM_CONTEXT_STATUS, LLM_CONTEXT_RELEASE],
-      supports_stream: false,
+      supports_stream: this.options.supportsStream,
       supports_tools: this.options.supportsTools,
       supports_json_mode: this.options.supportsJsonMode,
       context: {
@@ -139,8 +149,13 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
     const contextAction = frame.actionId === LLM_CONTEXT_STATUS || frame.actionId === LLM_CONTEXT_RELEASE ||
       (frame.actionId === LLM_COMPLETE && hasContextRequest(frame.params));
     if (!contextAction) return;
+    if (frame.actionId === LLM_COMPLETE && frame.async_) {
+      const request = parseCompleteRequest(frame.params);
+      if (request.stream) throw paramsError("stream=true cannot be combined with async=true");
+    }
     const owner = this.owner(context);
-    await this.options.authorizer?.(owner, frame.actionId, "admission", context, signal);
+    await this.checkAuthorization(
+      owner, frame.actionId, "admission", requiredCapabilities(frame), context, signal);
   }
 
   async execute(
@@ -164,9 +179,10 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
       throw paramsError("this node does not advertise LLM tool-definition support");
     }
     if (request.context === undefined) return this.inner.execute(frame, context, signal);
-    if (request.stream) {
-      throw paramsError("the Action Server context coordinator supports unary/async completion, not streaming");
+    if (request.stream && !this.options.supportsStream) {
+      throw paramsError("this node does not advertise LLM streaming support");
     }
+    if (request.stream && frame.async_) throw paramsError("stream=true cannot be combined with async=true");
     if (["append", "fork", "reset"].includes(request.context.operation)
       && (request.context.contextId === undefined || request.context.baseVersion === undefined)) {
       throw paramsError("append/fork/reset require context_id and base_version");
@@ -185,6 +201,19 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
       throw error;
     }
 
+    if (request.stream) {
+      if (providerResult.streamFrames === undefined) {
+        this.abort(reservation, ErrorCodes.NWP_NODE_UNAVAILABLE);
+        throw internalError("stateful streaming llm.complete returned no StreamFrame sequence");
+      }
+      return {
+        streamFrames: this.coordinateStream(
+          providerResult.streamFrames, reservation, owner, frame, context, signal),
+        anchorRef: providerResult.anchorRef ?? LLM_COMPLETE_STREAM_ANCHOR,
+        tokenEst: providerResult.tokenEst,
+      };
+    }
+
     let response;
     try {
       if (!isObject(providerResult.result)) throw new TypeError("result must be an object");
@@ -199,7 +228,8 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
     }
 
     try {
-      await this.options.authorizer?.(owner, frame.actionId, "commit", context, signal);
+      await this.checkAuthorization(
+        owner, frame.actionId, "commit", requiredCapabilities(frame), context, signal);
       if (signal?.aborted) throw new Error("action execution cancelled");
     } catch (error) {
       this.abort(reservation, error instanceof ActionExecutionError
@@ -219,6 +249,100 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
     } catch (error) {
       if (error instanceof LlmContextStoreError) throw mapStoreError(error);
       throw error;
+    }
+  }
+
+  private async *coordinateStream(
+    source: AsyncIterable<StreamFrame>,
+    reservation: LlmContextMutationReservation,
+    owner: LlmContextOwner,
+    requestFrame: ActionFrame,
+    actionContext: ActionContext,
+    signal?: AbortSignal,
+  ): AsyncGenerator<StreamFrame> {
+    const content: string[] = [];
+    const toolCalls = [] as NonNullable<LlmMessageDto["toolCalls"]>[number][];
+    let resolved = false;
+    let terminalSeen = false;
+    try {
+      for await (const frame of source) {
+        if (signal?.aborted) throw new Error("action stream cancelled");
+        if (terminalSeen) throw internalError("LLM stream emitted frames after terminal");
+        let chunks: LlmCompleteStreamChunkDto[];
+        try {
+          chunks = frame.data.map(llmCompleteStreamChunkFromWire);
+        } catch (error) {
+          throw internalError(
+            `stateful llm.complete returned an invalid stream payload: ${errorMessage(error)}`);
+        }
+        if (!frame.isLast && chunks.some(chunk =>
+          chunk.stopReason !== undefined || chunk.error !== undefined ||
+          chunk.usage !== undefined || chunk.context !== undefined)) {
+          throw internalError(
+            "LLM stream stop_reason, error, usage, and context are terminal-only fields");
+        }
+        for (const chunk of chunks) {
+          if (chunk.contentDelta !== undefined) content.push(chunk.contentDelta);
+          if (chunk.toolCalls !== undefined) toolCalls.push(...chunk.toolCalls);
+        }
+        const sanitized: LlmCompleteStreamChunkDto[] = chunks.map(
+          chunk => ({ ...chunk, context: undefined }));
+        if (!frame.isLast) {
+          yield rewriteStreamFrame(frame, sanitized);
+          continue;
+        }
+
+        terminalSeen = true;
+        let terminalIndex = -1;
+        for (let index = 0; index < sanitized.length; index++) {
+          if (sanitized[index]!.stopReason !== undefined) terminalIndex = index;
+        }
+        const failed = frame.errorCode !== undefined || sanitized.some(chunk =>
+          chunk.stopReason === "error" || chunk.error !== undefined);
+        if (failed) {
+          const code = frame.errorCode ?? ErrorCodes.NWP_NODE_UNAVAILABLE;
+          this.abort(reservation, code);
+          resolved = true;
+          yield rewriteStreamFrame(frame, sanitized, code);
+          return;
+        }
+        if (terminalIndex < 0) {
+          throw internalError("successful LLM stream terminal frame requires stop_reason");
+        }
+
+        try {
+          await this.checkAuthorization(
+            owner, requestFrame.actionId, "commit", requiredCapabilities(requestFrame),
+            actionContext, signal);
+          if (signal?.aborted) throw new Error("action stream cancelled");
+        } catch (error) {
+          this.abort(reservation, error instanceof ActionExecutionError
+            ? error.errorCode : ErrorCodes.NWP_NODE_UNAVAILABLE);
+          resolved = true;
+          throw error;
+        }
+
+        try {
+          const receipt = this.store.commit(reservation, {
+            role: "assistant",
+            content: content.join("") || undefined,
+            toolCalls: toolCalls.length === 0 ? undefined : toolCalls,
+          });
+          sanitized[terminalIndex] = { ...sanitized[terminalIndex]!, context: receipt };
+        } catch (error) {
+          const mapped = error instanceof LlmContextStoreError ? mapStoreError(error) : error;
+          this.abort(reservation, mapped instanceof ActionExecutionError
+            ? mapped.errorCode : ErrorCodes.NWP_NODE_UNAVAILABLE);
+          resolved = true;
+          throw mapped;
+        }
+        resolved = true;
+        yield rewriteStreamFrame(frame, sanitized);
+        return;
+      }
+      throw internalError("stateful llm.complete stream ended without a terminal frame");
+    } finally {
+      if (!resolved) this.abort(reservation, ErrorCodes.NWP_NODE_UNAVAILABLE);
     }
   }
 
@@ -319,6 +443,25 @@ export class StatefulLlmActionProvider implements IActionNodeProvider {
       throw internalError(`failed to abort LLM context reservation: ${errorMessage(error)}`);
     }
   }
+
+  private async checkAuthorization(
+    owner: LlmContextOwner,
+    actionId: string,
+    stage: LlmAuthorizationStage,
+    required: readonly string[],
+    context: ActionContext,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (this.options.authorizer === undefined) {
+      throw new ActionExecutionError(
+        403,
+        NpsStatusCodes.NPS_AUTH_FORBIDDEN,
+        ErrorCodes.NWP_LLM_CONTEXT_FORBIDDEN,
+        "stateful LLM context authorization is not configured",
+      );
+    }
+    await this.options.authorizer(owner, actionId, stage, [...required], context, signal);
+  }
 }
 
 function parseCompleteRequest(params: Record<string, unknown> | undefined): LlmCompleteActionRequest {
@@ -356,6 +499,22 @@ function completionResult(
   };
 }
 
+function rewriteStreamFrame(
+  frame: StreamFrame,
+  chunks: readonly LlmCompleteStreamChunkDto[],
+  errorCode = frame.errorCode,
+): StreamFrame {
+  return new StreamFrame(
+    frame.streamId,
+    frame.seq,
+    frame.isLast || errorCode !== undefined,
+    chunks.map(llmCompleteStreamChunkToWire),
+    frame.anchorRef,
+    frame.windowSize,
+    errorCode,
+  );
+}
+
 function requireParams(
   params: Record<string, unknown> | undefined,
   actionId: string,
@@ -366,6 +525,17 @@ function requireParams(
 
 function hasContextRequest(params: Record<string, unknown> | undefined): boolean {
   return isObject(params) && params["context"] !== undefined;
+}
+
+function requiredCapabilities(frame: ActionFrame): readonly string[] {
+  if (frame.actionId === LLM_CONTEXT_STATUS || frame.actionId === LLM_CONTEXT_RELEASE) {
+    return [CAPABILITY_LLM_CONTEXT];
+  }
+  const capabilities: string[] = [CAPABILITY_LLM_COMPLETE, CAPABILITY_LLM_CONTEXT];
+  if (frame.params?.["stream"] === true) capabilities.push(CAPABILITY_LLM_STREAM);
+  const tools = frame.params?.["tools"];
+  if (Array.isArray(tools) && tools.length > 0) capabilities.push(CAPABILITY_LLM_TOOL_CALL);
+  return capabilities;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
