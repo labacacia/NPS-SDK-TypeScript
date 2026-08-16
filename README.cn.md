@@ -137,10 +137,10 @@ const results = catalogForProfile(NODE_L1).map((c) => ({ id: c.id, result: "pass
 const manifest = createConformanceManifest({
   profile: NODE_L1,
   iutName: "my-node",
-  iutVersion: "1.0.0-alpha.16",
+  iutVersion: "1.0.0-alpha.18",
   iutNid: "urn:nps:node:example.com:my-node",
   peerName: "labacacia-fixture",
-  peerVersion: "1.0.0-alpha.16",
+  peerVersion: "1.0.0-alpha.18",
   results,
 });
 const validation = validateConformanceManifest(manifest);
