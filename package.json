@@ -62,7 +62,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/labacacia/NPS-sdk-ts.git"
+    "url": "git+https://github.com/labacacia/NPS-SDK-TypeScript.git"
   },
   "license": "Apache-2.0",
   "engines": {
