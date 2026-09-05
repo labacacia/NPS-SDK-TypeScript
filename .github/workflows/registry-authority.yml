@@ -72,10 +72,14 @@ jobs:
         if: always() && env.CARGO_REGISTRY_TOKEN != ''
         shell: bash
         run: |
-          curl --fail --silent --show-error \
+          status=$(curl --silent --show-error \
+            --output "$RUNNER_TEMP/crates-me.json" \
+            --write-out '%{http_code}' \
             --header "Authorization: $CARGO_REGISTRY_TOKEN" \
             --header "User-Agent: NPS-alpha19-authority-preflight" \
-            https://crates.io/api/v1/me > "$RUNNER_TEMP/crates-me.json"
+            https://crates.io/api/v1/me)
+          echo "crates.io authenticated identity probe returned HTTP $status."
+          [[ "$status" == "200" ]]
           curl --fail --silent --show-error \
             --header "User-Agent: NPS-alpha19-authority-preflight" \
             https://crates.io/api/v1/crates/nps-sdk/owners \
