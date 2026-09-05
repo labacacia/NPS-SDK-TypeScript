@@ -41,6 +41,10 @@
     "./conformance": {
       "import": "./dist/conformance.js",
       "types": "./dist/conformance.d.ts"
+    },
+    "./alpha19": {
+      "import": "./dist/alpha19.js",
+      "types": "./dist/alpha19.d.ts"
     }
   },
   "scripts": {

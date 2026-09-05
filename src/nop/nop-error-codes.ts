@@ -44,6 +44,9 @@ export const NOP_STREAM_NAK_UNRESOLVABLE     = "NOP-STREAM-NAK-UNRESOLVABLE" as 
  * rejection a lease renewal gets when it arrives after the lease expired and was reclaimed.
  */
 export const NOP_CLAIM_CONFLICT              = "NOP-CLAIM-CONFLICT" as const;
+export const NOP_REPLAY_CONFLICT             = "NOP-REPLAY-CONFLICT" as const;
+export const NOP_REPLAY_LIMIT                = "NOP-REPLAY-LIMIT" as const;
+export const NOP_AGGREGATION_INVALID         = "NOP-AGGREGATION-INVALID" as const;
 
 /** Maps each NOP error code to its NPS status code. */
 export const NOP_ERROR_TO_NPS_STATUS: Record<string, string> = {
@@ -78,4 +81,7 @@ export const NOP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NOP-CLAIM-CONFLICT":             "NPS-CLIENT-CONFLICT",
   "NOP-TASK-RESULT-EXPIRED":        "NPS-CLIENT-NOT-FOUND",
   "NOP-STREAM-NAK-UNRESOLVABLE":    "NPS-STREAM-SEQ-GAP",
+  "NOP-REPLAY-CONFLICT":            "NPS-CLIENT-CONFLICT",
+  "NOP-REPLAY-LIMIT":               "NPS-LIMIT-RESOURCE",
+  "NOP-AGGREGATION-INVALID":        "NPS-CLIENT-BAD-PARAM",
 };

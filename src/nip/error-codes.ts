@@ -66,6 +66,8 @@ export const RA_PENDING_REJECTED  = "NIP-RA-PENDING-REJECTED" as const;
 
 // ── OCSP staple (referenced in task) ────────────────────────────────────────
 export const OCSP_STAPLE_EXPIRED      = "NIP-OCSP-STAPLE-EXPIRED" as const;
+export const OCSP_UNKNOWN             = "NIP-OCSP-UNKNOWN" as const;
+export const REVOCATION_STATE_STALE   = "NIP-REVOCATION-STATE-STALE" as const;
 
 // ── NIP v0.10 — node_roles ───────────────────────────────────────────────────
 export const CERT_NODE_ROLES_MISMATCH = "NIP-CERT-NODE-ROLES-MISMATCH" as const;
@@ -124,6 +126,8 @@ export const NIP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NIP-RA-NID-NOT-ALLOWED":                "NPS-AUTH-FORBIDDEN",
   "NIP-RA-PENDING-REJECTED":               "NPS-AUTH-FORBIDDEN",
   "NIP-OCSP-STAPLE-EXPIRED":               "NPS-AUTH-UNAUTHENTICATED",
+  "NIP-OCSP-UNKNOWN":                      "NPS-AUTH-UNAUTHENTICATED",
+  "NIP-REVOCATION-STATE-STALE":            "NPS-SERVER-UNAVAILABLE",
   // spec/error-codes.md:119 — NIP-CERT-NODE-ROLES-MISMATCH is NPS-CLIENT-BAD-FRAME,
   // deliberately distinct from its NIP-CERT-CAPABILITIES-EXCEEDED sibling below.
   "NIP-CERT-NODE-ROLES-MISMATCH":          "NPS-CLIENT-BAD-FRAME",
