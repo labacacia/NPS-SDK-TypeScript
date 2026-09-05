@@ -88,28 +88,36 @@ jobs:
           echo "Scoped-token publish-new/publish-update authority is operator-attested."
           echo "The generic /api/v1/me endpoint is not a validity test for scoped tokens."
 
-      - name: Prove Sonatype namespace-scoped authentication
+      - name: Prove Sonatype token-authentication boundary
         if: >-
           always() && env.MAVEN_CENTRAL_USERNAME != '' &&
           env.MAVEN_CENTRAL_TOKEN != ''
         shell: bash
         run: |
           auth=$(printf '%s:%s' "$MAVEN_CENTRAL_USERNAME" "$MAVEN_CENTRAL_TOKEN" | base64 -w0)
-          status=$(curl --silent --show-error \
+          target_status=$(curl --silent --show-error \
             --output "$RUNNER_TEMP/sonatype-repositories.json" \
             --write-out '%{http_code}' \
             --header "Authorization: Bearer $auth" \
             'https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?ip=any&profile_id=com.labacacia.nps')
-          [[ "$status" == "200" ]]
+          random_status=$(curl --silent --show-error \
+            --output "$RUNNER_TEMP/sonatype-random-repositories.json" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $auth" \
+            'https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?ip=any&profile_id=invalid.codex.authority.probe')
+          [[ "$target_status" == "200" && "$random_status" == "200" ]]
           python3 -m json.tool "$RUNNER_TEMP/sonatype-repositories.json" >/dev/null
-          echo "Sonatype namespace-scoped authenticated query succeeded."
+          python3 -m json.tool "$RUNNER_TEMP/sonatype-random-repositories.json" >/dev/null
+          echo "Sonatype Portal token authentication succeeded."
+          echo "The profile_id filter does not itself prove namespace authority."
 
       - name: Record non-writing boundary
         if: always()
         shell: bash
         run: |
           echo "PyPI and NuGet.org provide no non-writing token-authority probe used by this gate."
-          echo "Their secret presence is inventory only, not publish-authority proof."
+          echo "Sonatype token authentication does not bind the token to the requested namespace."
+          echo "Secret presence is inventory only, not publish-authority proof."
           echo "No package, tag, image, deployment, release or registry object was created."
-          echo "Authority gate remains blocked until approved PyPI and NuGet.org write proofs are encoded." >&2
+          echo "Authority gate remains blocked until approved PyPI, NuGet.org and Sonatype UI evidence is encoded." >&2
           exit 1
