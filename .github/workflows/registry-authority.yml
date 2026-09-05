@@ -118,3 +118,5 @@ jobs:
           echo "PyPI and NuGet.org provide no non-writing token-authority probe used by this gate."
           echo "Their secret presence is inventory only, not publish-authority proof."
           echo "No package, tag, image, deployment, release or registry object was created."
+          echo "Authority gate remains blocked until approved PyPI and NuGet.org write proofs are encoded." >&2
+          exit 1
