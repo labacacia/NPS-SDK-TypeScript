@@ -1,18 +1,21 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const requiredFiles = [
-  "dist/index.js",
-  "dist/index.d.ts",
-  "dist/core/index.js",
-  "dist/ncp/index.js",
-  "dist/nwp/index.js",
-  "dist/nip/index.js",
-  "dist/ndp/index.js",
-  "dist/nop/index.js",
-];
+const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+const requiredFiles = [...new Set([
+  manifest.main,
+  manifest.types,
+  ...Object.values(manifest.exports ?? {}).flatMap((entry) => [entry.import, entry.types]),
+].filter(Boolean).map((file) => file.replace(/^\.\//, "")))];
+
+if (requiredFiles.length !== 20) {
+  throw new Error(`Expected 20 JS/type export targets, found ${requiredFiles.length}`);
+}
 
 for (const file of requiredFiles) {
+  if (!file.startsWith("dist/")) {
+    throw new Error(`Package export must resolve under dist/: ${file}`);
+  }
   if (!existsSync(file)) {
     throw new Error(`Missing npm package entrypoint: ${file}`);
   }
@@ -29,4 +32,4 @@ for (const file of requiredFiles) {
   }
 }
 
-console.log(`npm pack verification passed (${packed.size} files).`);
+console.log(`npm pack verification passed (${requiredFiles.length} export targets, ${packed.size} files).`);

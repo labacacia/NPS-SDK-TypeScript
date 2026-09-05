@@ -36,6 +36,8 @@ export const NDP_ANNOUNCE_STALE            = "NDP-ANNOUNCE-STALE" as const;
  * `cluster_anchor` cluster (split-brain). The Registry refuses to resolve arbitrarily.
  */
 export const NDP_CLUSTER_SPLIT             = "NDP-CLUSTER-SPLIT" as const;
+export const NDP_STATE_UNAVAILABLE         = "NDP-STATE-UNAVAILABLE" as const;
+export const NDP_STATE_CORRUPT             = "NDP-STATE-CORRUPT" as const;
 
 /** Maps each NDP error code to its NPS status code. */
 export const NDP_ERROR_TO_NPS_STATUS: Record<string, string> = {
@@ -59,4 +61,6 @@ export const NDP_ERROR_TO_NPS_STATUS: Record<string, string> = {
   "NDP-FEDERATION-LOOP":            "NPS-CLIENT-CONFLICT",
   "NDP-ANNOUNCE-STALE":             "NPS-CLIENT-NOT-FOUND",
   "NDP-CLUSTER-SPLIT":              "NPS-CLIENT-CONFLICT",
+  "NDP-STATE-UNAVAILABLE":          "NPS-SERVER-UNAVAILABLE",
+  "NDP-STATE-CORRUPT":              "NPS-SERVER-INTERNAL",
 };

@@ -14,7 +14,7 @@ Part of the [LabAcacia](https://github.com/LabAcacia) / INNO LOTUS PTY LTD open-
 
 ## Status
 
-**v1.0.0-alpha.18 release — portable protocol conformance** · 5 protocols
+**v1.0.0-alpha.19 release candidate — portable protocol conformance** · 5 protocols
 
 Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP serving helper (`NwpNativeNodeServer`), and TC-N1/TC-N2 conformance manifest helpers (`@labacacia/nps-sdk/conformance`).
 
@@ -139,10 +139,10 @@ const results = catalogForProfile(NODE_L1).map((c) => ({ id: c.id, result: "pass
 const manifest = createConformanceManifest({
   profile: NODE_L1,
   iutName: "my-node",
-  iutVersion: "1.0.0-alpha.18",
+  iutVersion: "1.0.0-alpha.19",
   iutNid: "urn:nps:node:example.com:my-node",
   peerName: "labacacia-fixture",
-  peerVersion: "1.0.0-alpha.18",
+  peerVersion: "1.0.0-alpha.19",
   results,
 });
 const validation = validateConformanceManifest(manifest);

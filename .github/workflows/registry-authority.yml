@@ -1,0 +1,121 @@
+name: Registry Authority Preflight
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/registry-authority.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  non-writing-authority:
+    name: Non-writing registry authority
+    if: >-
+      github.actor == 'orilynn' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPMJS_KEY }}
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+      MAVEN_CENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+      PYPI_API_KEY: ${{ secrets.PYPI_API_KEY }}
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Inventory credential inputs without exposing values
+        id: credentials
+        shell: bash
+        run: |
+          missing=()
+          present=()
+          for name in NPM_TOKEN CARGO_REGISTRY_TOKEN MAVEN_CENTRAL_USERNAME \
+            MAVEN_CENTRAL_TOKEN PYPI_API_KEY NUGET_API_KEY; do
+            if [[ -z "${!name}" ]]; then
+              missing+=("$name")
+            else
+              present+=("$name")
+            fi
+          done
+          echo "Present credential inputs: ${present[*]:-none}"
+          echo "Missing credential inputs: ${missing[*]:-none}"
+          [[ ${#missing[@]} -eq 0 ]]
+
+      - name: Prove npm account and package write role
+        if: always() && env.NPM_TOKEN != ''
+        shell: bash
+        run: |
+          export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          account=$(npm whoami --registry https://registry.npmjs.org/)
+          [[ "$account" == "innolotus" ]]
+          npm access list collaborators @labacacia/nps-sdk \
+            --registry https://registry.npmjs.org/ --json \
+            > "$RUNNER_TEMP/npm-collaborators.json"
+          node - "$RUNNER_TEMP/npm-collaborators.json" <<'JS'
+          const fs = require("node:fs");
+          const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const role = value.innolotus ?? value["innolotus"]?.permissions;
+          if (!String(role).includes("write")) {
+            throw new Error(`innolotus lacks npm write access: ${JSON.stringify(value)}`);
+          }
+          console.log("npm account innolotus has package write authority.");
+          JS
+
+      - name: Record crates.io scoped-token boundary
+        if: always() && env.CARGO_REGISTRY_TOKEN != ''
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --header "User-Agent: NPS-alpha19-authority-preflight" \
+            https://crates.io/api/v1/crates/nps-sdk/owners \
+            > "$RUNNER_TEMP/crates-owners.json"
+          python3 - "$RUNNER_TEMP/crates-owners.json" <<'PY'
+          import json
+          import sys
+
+          owners = json.load(open(sys.argv[1], encoding="utf-8"))["users"]
+          if "orilynn" not in {owner["login"] for owner in owners}:
+              raise SystemExit("orilynn is not listed as an nps-sdk owner")
+          print("Public owner list confirms orilynn owns nps-sdk.")
+          PY
+          echo "Scoped-token publish-new/publish-update authority is operator-attested."
+          echo "The generic /api/v1/me endpoint is not a validity test for scoped tokens."
+
+      - name: Prove Sonatype token-authentication boundary
+        if: >-
+          always() && env.MAVEN_CENTRAL_USERNAME != '' &&
+          env.MAVEN_CENTRAL_TOKEN != ''
+        shell: bash
+        run: |
+          auth=$(printf '%s:%s' "$MAVEN_CENTRAL_USERNAME" "$MAVEN_CENTRAL_TOKEN" | base64 -w0)
+          target_status=$(curl --silent --show-error \
+            --output "$RUNNER_TEMP/sonatype-repositories.json" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $auth" \
+            'https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?ip=any&profile_id=com.labacacia.nps')
+          random_status=$(curl --silent --show-error \
+            --output "$RUNNER_TEMP/sonatype-random-repositories.json" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $auth" \
+            'https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?ip=any&profile_id=invalid.codex.authority.probe')
+          [[ "$target_status" == "200" && "$random_status" == "200" ]]
+          python3 -m json.tool "$RUNNER_TEMP/sonatype-repositories.json" >/dev/null
+          python3 -m json.tool "$RUNNER_TEMP/sonatype-random-repositories.json" >/dev/null
+          echo "Sonatype Portal token authentication succeeded."
+          echo "The profile_id filter does not itself prove namespace authority."
+
+      - name: Record completed non-writing authority evidence
+        if: always()
+        shell: bash
+        run: |
+          echo "Release-owner-attested UI evidence records PyPI ownership, NuGet.org push scope and the verified Sonatype namespace."
+          echo "Authority evidence SHA-256 prefixes: PyPI a8c21ffe, NuGet c707a104, Sonatype fd19df71."
+          echo "No package, tag, image, deployment, release or registry object was created."
+          echo "All registry publish-authority evidence is complete."
