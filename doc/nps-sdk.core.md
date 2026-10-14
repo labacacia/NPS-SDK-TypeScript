@@ -2,7 +2,7 @@ English | [中文版](./nps-sdk.core.cn.md)
 
 # `@labacacia/nps-sdk/core` — Class and Method Reference
 
-> Spec: [NPS-1 NCP v0.7](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-1-NCP.md)
+> Spec: [NPS-1 NCP v0.7](https://github.com/labacacia/NPS/blob/main/spec/NPS-1-NCP.md)
 
 Wire-level primitives: frame header parsing, the codec pair
 (Tier-1 JSON / Tier-2 MsgPack), the anchor cache, error types, and

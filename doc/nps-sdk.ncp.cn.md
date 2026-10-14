@@ -2,7 +2,7 @@
 
 # `@labacacia/nps-sdk/ncp` — 类与方法参考
 
-> 规范：[NPS-1 NCP v0.7](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-1-NCP.md)
+> 规范：[NPS-1 NCP v0.7](https://github.com/labacacia/NPS/blob/main/spec/NPS-1-NCP.md)
 
 NCP 是线路与 schema 层。本模块提供五个核心帧
 （`AnchorFrame`、`DiffFrame`、`StreamFrame`、`CapsFrame`、`ErrorFrame`），

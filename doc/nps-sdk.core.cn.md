@@ -2,7 +2,7 @@
 
 # `@labacacia/nps-sdk/core` — 类与方法参考
 
-> 规范：[NPS-1 NCP v0.7](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-1-NCP.md)
+> 规范：[NPS-1 NCP v0.7](https://github.com/labacacia/NPS/blob/main/spec/NPS-1-NCP.md)
 
 线路层原语：帧头解析、编解码器对（Tier-1 JSON / Tier-2 MsgPack）、
 锚点缓存、错误类型，以及 NIP 签名使用的规范化 JSON 辅助函数。
