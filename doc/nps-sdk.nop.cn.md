@@ -2,7 +2,7 @@
 
 # `@labacacia/nps-sdk/nop` — 类与方法参考
 
-> 规范：[NPS-5 NOP v0.6](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-5-NOP.md)
+> 规范：[NPS-5 NOP v0.6](https://github.com/labacacia/NPS/blob/main/spec/NPS-5-NOP.md)
 
 NOP 是编排层 —— 提交一个委托子任务 DAG、等待完成、流式拉回结果。
 本模块提供四个 NOP 帧（0x40–0x43）、任务模型（`TaskDag`、`DagNode`、
