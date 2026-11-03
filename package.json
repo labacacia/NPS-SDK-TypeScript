@@ -1,7 +1,7 @@
 {
   "name": "@labacacia/nps-sdk",
-  "version": "1.0.0-alpha.19",
-  "description": "TypeScript SDK for the Neural Protocol Suite (NPS) — NCP, NWP, NIP, NDP, NOP",
+  "version": "1.0.0-alpha.20",
+  "description": "TypeScript SDK for the Neural Protocol Suite (NPS) \u2014 NCP, NWP, NIP, NDP, NOP",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,6 +45,14 @@
     "./alpha19": {
       "import": "./dist/alpha19.js",
       "types": "./dist/alpha19.d.ts"
+    },
+    "./alpha20": {
+      "import": "./dist/alpha20.js",
+      "types": "./dist/alpha20.d.ts"
+    },
+    "./alpha20/sqlite": {
+      "import": "./dist/alpha20/sqlite-projection-replay-store.js",
+      "types": "./dist/alpha20/sqlite-projection-replay-store.d.ts"
     }
   },
   "scripts": {
@@ -52,7 +60,8 @@
     "prepack": "npm run build && node scripts/verify-pack.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run build"
   },
   "files": [
     "dist/",
@@ -83,6 +92,6 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.1.0"
+    "vitest": "^4.1.12"
   }
 }

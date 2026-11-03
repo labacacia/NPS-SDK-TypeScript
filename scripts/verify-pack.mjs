@@ -8,8 +8,8 @@ const requiredFiles = [...new Set([
   ...Object.values(manifest.exports ?? {}).flatMap((entry) => [entry.import, entry.types]),
 ].filter(Boolean).map((file) => file.replace(/^\.\//, "")))];
 
-if (requiredFiles.length !== 20) {
-  throw new Error(`Expected 20 JS/type export targets, found ${requiredFiles.length}`);
+if (requiredFiles.length !== 24) {
+  throw new Error(`Expected 24 JS/type export targets, found ${requiredFiles.length}`);
 }
 
 for (const file of requiredFiles) {
