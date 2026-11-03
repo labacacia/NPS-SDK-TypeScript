@@ -144,8 +144,8 @@ Error
 
 | 模块 | 规范 |
 |------|------|
-| `core` + `ncp` | [NPS-1 NCP v0.7](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-1-NCP.cn.md) |
-| `nwp`          | [NPS-2 NWP v0.13](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-2-NWP.cn.md) |
-| `nip`          | [NPS-3 NIP v0.9](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-3-NIP.cn.md) |
-| `ndp`          | [NPS-4 NDP v0.8](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-4-NDP.cn.md) |
-| `nop`          | [NPS-5 NOP v0.6](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-5-NOP.cn.md) |
+| `core` + `ncp` | [NPS-1 NCP v0.7](https://github.com/labacacia/NPS/blob/main/spec/NPS-1-NCP.cn.md) |
+| `nwp`          | [NPS-2 NWP v0.13](https://github.com/labacacia/NPS/blob/main/spec/NPS-2-NWP.cn.md) |
+| `nip`          | [NPS-3 NIP v0.9](https://github.com/labacacia/NPS/blob/main/spec/NPS-3-NIP.cn.md) |
+| `ndp`          | [NPS-4 NDP v0.8](https://github.com/labacacia/NPS/blob/main/spec/NPS-4-NDP.cn.md) |
+| `nop`          | [NPS-5 NOP v0.6](https://github.com/labacacia/NPS/blob/main/spec/NPS-5-NOP.cn.md) |

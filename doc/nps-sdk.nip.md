@@ -2,7 +2,7 @@ English | [中文版](./nps-sdk.nip.cn.md)
 
 # `@labacacia/nps-sdk/nip` — Class and Method Reference
 
-> Spec: [NPS-3 NIP v0.9](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-3-NIP.md)
+> Spec: [NPS-3 NIP v0.9](https://github.com/labacacia/NPS/blob/main/spec/NPS-3-NIP.md)
 
 NIP is the TLS/PKI of NPS. This module exposes the three identity frames
 (`IdentFrame`, `TrustFrame`, `RevokeFrame`), the metadata interface, and

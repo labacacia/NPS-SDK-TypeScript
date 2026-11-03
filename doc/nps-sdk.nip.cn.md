@@ -2,7 +2,7 @@
 
 # `@labacacia/nps-sdk/nip` — 类与方法参考
 
-> 规范：[NPS-3 NIP v0.9](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-3-NIP.md)
+> 规范：[NPS-3 NIP v0.9](https://github.com/labacacia/NPS/blob/main/spec/NPS-3-NIP.md)
 
 NIP 是 NPS 的 TLS/PKI。本模块暴露三个身份帧
 （`IdentFrame`、`TrustFrame`、`RevokeFrame`）、元数据接口，

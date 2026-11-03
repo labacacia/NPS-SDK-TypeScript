@@ -1,8 +1,16 @@
 English | [中文版](./README.cn.md)
 
 # @labacacia/nps-sdk — TypeScript / Node.js
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../../LICENSE)
-[![Release](https://img.shields.io/badge/release-v1.0.0--alpha.18-orange.svg)](../../CHANGELOG.md)
+
+> alpha.20 candidate, unpublished. Six-SDK helper contracts and qualified runtime
+> paths differ; full production/cross-SDK runtime parity is not qualified.
+
+
+Alpha.20 implementation notes: [experimental admission and durable replay](ALPHA20.md).
+These slices do not advertise production profile support or establish release qualification.
+
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/labacacia/NPS/blob/main/LICENSE)
+[![Release](https://img.shields.io/badge/candidate-v1.0.0--alpha.20-orange.svg)](CHANGELOG.md)
 [![NCP](https://img.shields.io/badge/NCP-v0.11-5b8cff.svg)]()
 [![NWP](https://img.shields.io/badge/NWP-v0.21-4af0b0.svg)]()
 [![NIP](https://img.shields.io/badge/NIP-v0.14-7b61ff.svg)]()
@@ -14,7 +22,7 @@ Part of the [LabAcacia](https://github.com/LabAcacia) / INNO LOTUS PTY LTD open-
 
 ## Status
 
-**v1.0.0-alpha.19 release candidate — portable protocol conformance** · 5 protocols
+**v1.0.0-alpha.20 release candidate — unpublished, bounded experimental support** · 5 protocols
 
 Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP serving helper (`NwpNativeNodeServer`), and TC-N1/TC-N2 conformance manifest helpers (`@labacacia/nps-sdk/conformance`).
 
@@ -42,7 +50,7 @@ Alpha.15 additions: typed remote NIP CA client (`NipCaClient`), native-mode NWP 
   and CR-0007 runtime decisions.
 
 All five profiles consume the language-neutral fixtures under
-[`spec/conformance`](../../spec/conformance/).
+[`spec/conformance`](https://github.com/labacacia/NPS/blob/prep/alpha20-release-candidate/spec/conformance/).
 
 ## Installation
 

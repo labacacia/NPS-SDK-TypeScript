@@ -2,7 +2,7 @@ English | [中文版](./nps-sdk.nop.cn.md)
 
 # `@labacacia/nps-sdk/nop` — Class and Method Reference
 
-> Spec: [NPS-5 NOP v0.6](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-5-NOP.md)
+> Spec: [NPS-5 NOP v0.6](https://github.com/labacacia/NPS/blob/main/spec/NPS-5-NOP.md)
 
 NOP is the orchestration layer — submit a DAG of delegated subtasks, wait
 for completion, stream results back. This module ships the four NOP

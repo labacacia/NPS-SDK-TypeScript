@@ -2,7 +2,7 @@ English | [中文版](./nps-sdk.ncp.cn.md)
 
 # `@labacacia/nps-sdk/ncp` — Class and Method Reference
 
-> Spec: [NPS-1 NCP v0.7](https://github.com/labacacia/NPS-Release/blob/main/spec/NPS-1-NCP.md)
+> Spec: [NPS-1 NCP v0.7](https://github.com/labacacia/NPS/blob/main/spec/NPS-1-NCP.md)
 
 NCP is the wire-and-schema layer. This module provides the five core frames
 (`AnchorFrame`, `DiffFrame`, `StreamFrame`, `CapsFrame`, `ErrorFrame`) plus

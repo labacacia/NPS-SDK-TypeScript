@@ -9,6 +9,8 @@
 // question 2 for the proposal to register them upstream.
 
 export const NCP_ERROR_CODES = {
+  NCP_FEATURE_NEGOTIATION_INVALID: "NCP-FEATURE-NEGOTIATION-INVALID",
+  NCP_FEATURE_REQUIRED_UNSUPPORTED: "NCP-FEATURE-REQUIRED-UNSUPPORTED",
   // Implementation-only codes (not in spec §6 — see test_results.md spec question 2)
   NCP_FRAME_PARSE_ERROR: "NCP-FRAME-PARSE-ERROR",
   NCP_FRAME_INCOMPLETE: "NCP-FRAME-INCOMPLETE",
@@ -44,6 +46,8 @@ export type NcpErrorCode = typeof NCP_ERROR_CODES[keyof typeof NCP_ERROR_CODES];
 
 /** Maps each spec-defined NCP error code to its NPS status code. */
 export const NCP_ERROR_TO_NPS_STATUS: Record<string, string> = {
+  "NCP-FEATURE-NEGOTIATION-INVALID": "NPS-CLIENT-BAD-FRAME",
+  "NCP-FEATURE-REQUIRED-UNSUPPORTED": "NPS-CLIENT-CONFLICT",
   "NCP-ANCHOR-NOT-FOUND":         "NPS-CLIENT-NOT-FOUND",
   "NCP-ANCHOR-SCHEMA-INVALID":    "NPS-CLIENT-BAD-FRAME",
   "NCP-ANCHOR-ID-MISMATCH":       "NPS-CLIENT-CONFLICT",
