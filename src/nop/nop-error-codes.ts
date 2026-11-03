@@ -49,7 +49,10 @@ export const NOP_REPLAY_LIMIT                = "NOP-REPLAY-LIMIT" as const;
 export const NOP_AGGREGATION_INVALID         = "NOP-AGGREGATION-INVALID" as const;
 
 /** Maps each NOP error code to its NPS status code. */
+export const NOP_EXECUTION_INDETERMINATE = "NOP-EXECUTION-INDETERMINATE" as const;
+
 export const NOP_ERROR_TO_NPS_STATUS: Record<string, string> = {
+  "NOP-EXECUTION-INDETERMINATE": "NPS-SERVER-INTERNAL",
   "NOP-TASK-NOT-FOUND":             "NPS-CLIENT-NOT-FOUND",
   "NOP-TASK-TIMEOUT":               "NPS-SERVER-TIMEOUT",
   "NOP-TASK-DAG-INVALID":           "NPS-CLIENT-BAD-FRAME",
